@@ -1,0 +1,3 @@
+display_name: Mailbox Compose
+short_description: Send a new Mailbox message to a teammate
+default_prompt: Use $mailbox-compose to send a fresh Mailbox message to a specific teammate.

@@ -1,0 +1,40 @@
+{
+  "members": [
+    {
+      "member": "leader",
+      "leader": true,
+      "mailbox": true,
+      "bridge": true
+    },
+    {
+      "member": "teammate_a",
+      "leader": false,
+      "mailbox": true,
+      "bridge": true,
+      "launcher": {
+        "cli": "claude",
+        "prompt_path": ".ai-team/prompts/teammate_a.md"
+      }
+    },
+    {
+      "member": "teammate_b",
+      "leader": false,
+      "mailbox": true,
+      "bridge": true,
+      "launcher": {
+        "cli": "codex",
+        "prompt_path": ".ai-team/prompts/teammate_b.md"
+      }
+    },
+    {
+      "member": "teammate_c",
+      "leader": false,
+      "mailbox": true,
+      "bridge": true,
+      "launcher": {
+        "cli": "codex",
+        "prompt_path": ".ai-team/prompts/teammate_c.md"
+      }
+    }
+  ]
+}
