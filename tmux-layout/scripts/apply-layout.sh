@@ -17,6 +17,35 @@ die() {
     exit 1
 }
 
+position_cells() {
+    # Args:
+    #   $1: レイアウト位置名。
+    # Returns:
+    #   標準出力: その位置が占有する基本領域名の一覧。
+    # Overview:
+    #   top / bottom / left / right を 4 分割の基本領域へ展開し、重なり検証に使う。
+    case "$1" in
+        top)
+            printf '%s\n' top-left top-right
+            ;;
+        bottom)
+            printf '%s\n' bottom-left bottom-right
+            ;;
+        left)
+            printf '%s\n' top-left bottom-left
+            ;;
+        right)
+            printf '%s\n' top-right bottom-right
+            ;;
+        top-left | top-right | bottom-left | bottom-right)
+            printf '%s\n' "$1"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 # --- Argument check ---
 if [ $# -lt 2 ]; then
     die "Usage: apply-layout.sh '<layout_json>' <session_name>"
@@ -84,69 +113,27 @@ for group_id in $GROUP_LIST; do
         continue
     fi
 
-    # Validate position combinations
-    HAS_TOP=false; HAS_BOTTOM=false
-    HAS_LEFT=false; HAS_RIGHT=false
-    HAS_TOP_LEFT=false; HAS_TOP_RIGHT=false
-    HAS_BOTTOM_LEFT=false; HAS_BOTTOM_RIGHT=false
-
+    # 基本領域（4 分割の各セル）を過不足なく 1 回ずつ占有していることを検証する。
+    declare -A OCCUPIED_CELLS=()
     for pos in "${POSITION_LIST[@]}"; do
-        case "$pos" in
-            top)          HAS_TOP=true ;;
-            bottom)       HAS_BOTTOM=true ;;
-            left)         HAS_LEFT=true ;;
-            right)        HAS_RIGHT=true ;;
-            top-left)     HAS_TOP_LEFT=true ;;
-            top-right)    HAS_TOP_RIGHT=true ;;
-            bottom-left)  HAS_BOTTOM_LEFT=true ;;
-            bottom-right) HAS_BOTTOM_RIGHT=true ;;
-            *) die "Unknown position: $pos" ;;
-        esac
+        if ! cells="$(position_cells "$pos")"; then
+            die "Unknown position: $pos"
+        fi
+
+        while IFS= read -r cell; do
+            [ -z "$cell" ] && continue
+            if [ -n "${OCCUPIED_CELLS[$cell]:-}" ]; then
+                die "Overlapping positions in group $group_id: ${OCCUPIED_CELLS[$cell]} and $pos both occupy $cell"
+            fi
+            OCCUPIED_CELLS["$cell"]="$pos"
+        done <<< "$cells"
     done
 
-    # 2分割と4分割の position は混在させない。
-    if [[ "$HAS_TOP" = true || "$HAS_BOTTOM" = true || "$HAS_LEFT" = true || "$HAS_RIGHT" = true ]] && [[ "$HAS_TOP_LEFT" = true || "$HAS_TOP_RIGHT" = true || "$HAS_BOTTOM_LEFT" = true || "$HAS_BOTTOM_RIGHT" = true ]]; then
-        die "Conflicting positions in group $group_id: cannot mix 2-pane positions with top-left/top-right/bottom-left/bottom-right"
-    fi
-
-    if [[ "$HAS_TOP" = true || "$HAS_BOTTOM" = true ]] && [[ "$HAS_LEFT" = true || "$HAS_RIGHT" = true ]]; then
-        die "Conflicting positions in group $group_id: cannot mix top/bottom with left/right"
-    fi
-
-    # top requires bottom (and vice versa)
-    if [[ "$HAS_TOP" = true && "$HAS_BOTTOM" != true ]]; then
-        die "Position 'top' requires 'bottom' in group $group_id"
-    fi
-    if [[ "$HAS_BOTTOM" = true && "$HAS_TOP" != true ]]; then
-        die "Position 'bottom' requires 'top' in group $group_id"
-    fi
-
-    # left requires right (and vice versa)
-    if [[ "$HAS_LEFT" = true && "$HAS_RIGHT" != true ]]; then
-        die "Position 'left' requires 'right' in group $group_id"
-    fi
-    if [[ "$HAS_RIGHT" = true && "$HAS_LEFT" != true ]]; then
-        die "Position 'right' requires 'left' in group $group_id"
-    fi
-
-    # top-left/top-right must come in pairs
-    if [[ "$HAS_TOP_LEFT" = true && "$HAS_TOP_RIGHT" != true ]]; then
-        die "Position 'top-left' requires 'top-right' in group $group_id"
-    fi
-    if [[ "$HAS_TOP_RIGHT" = true && "$HAS_TOP_LEFT" != true ]]; then
-        die "Position 'top-right' requires 'top-left' in group $group_id"
-    fi
-
-    # bottom-left/bottom-right must come in pairs
-    if [[ "$HAS_BOTTOM_LEFT" = true && "$HAS_BOTTOM_RIGHT" != true ]]; then
-        die "Position 'bottom-left' requires 'bottom-right' in group $group_id"
-    fi
-    if [[ "$HAS_BOTTOM_RIGHT" = true && "$HAS_BOTTOM_LEFT" != true ]]; then
-        die "Position 'bottom-right' requires 'bottom-left' in group $group_id"
-    fi
-
-    # At least some valid combination must exist
-    # top-left only (without right) is caught above, so reaching here means OK
+    for cell in top-left top-right bottom-left bottom-right; do
+        if [ -z "${OCCUPIED_CELLS[$cell]:-}" ]; then
+            die "Positions in group $group_id must cover $cell"
+        fi
+    done
 done
 
 log "Validation passed"

@@ -134,6 +134,8 @@ sequenceDiagram
 | `pane_id` | string \| null | 既存ペインの tmux ペイン ID（例: `%5`）。新規作成の場合は `null` |
 | `position` | string \| null | ペインの目標位置。`top-left`, `top-right`, `bottom-left`, `bottom-right`, `top`, `bottom`, `left`, `right`, `whole`（ウィンドウ全体）。削除する場合は `null` |
 
+同一 group 内の position は、`top-left`, `top-right`, `bottom-left`, `bottom-right` の 4 つの基本領域を重複なく覆う必要がある。`left` と `top-right` / `bottom-right` のように 2 ペイン系と 4 ペイン系が混在しても、占有領域が重ならなければ有効である。
+
 ### 適用結果（出力）
 
 `apply-layout.sh` が stdout に出力する JSON。適用後のウィンドウ・ペイン構成を返す。呼び出し元はこの結果を使って、新規作成されたペインへの CLI 起動などの後続処理を行える。
