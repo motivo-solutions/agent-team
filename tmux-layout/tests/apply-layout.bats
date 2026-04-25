@@ -56,9 +56,19 @@ teardown() {
 }
 
 @test "apply-layout rejects conflicting positions" {
-    # top と top-right は矛盾する（top は左右分割なし、top-right は左右分割あり）
+    # top と top-right は同じ top-right 領域を占有するため矛盾する。
     local layout='[
         {"group_id":0,"pane_id":null,"position":"top"},
+        {"group_id":0,"pane_id":null,"position":"top-right"}
+    ]'
+    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
+    [ "$status" -eq 1 ]
+}
+
+@test "apply-layout rejects mixed positions that overlap" {
+    local layout='[
+        {"group_id":0,"pane_id":null,"position":"left"},
+        {"group_id":0,"pane_id":null,"position":"bottom-left"},
         {"group_id":0,"pane_id":null,"position":"top-right"}
     ]'
     run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
@@ -223,6 +233,28 @@ teardown() {
     local positions
     positions=$(echo "$result" | jq -r '[.[][] | .position] | sort | join(",")')
     [ "$positions" = "left,right" ]
+}
+
+@test "apply-layout allows mixed positions when areas do not overlap" {
+    local layout
+    layout=$(jq -n --arg pid "$INITIAL_PANE" '[
+        {"group_id":0, "pane_id":$pid, "position":"left"},
+        {"group_id":0, "pane_id":null, "position":"top-right"},
+        {"group_id":0, "pane_id":null, "position":"bottom-right"}
+    ]')
+
+    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
+    [ "$status" -eq 0 ]
+
+    local result
+    result=$(echo "$output" | grep -v '^\[apply-layout\]')
+    local pane_count
+    pane_count=$(echo "$result" | jq '[.[] | length] | add')
+    [ "$pane_count" -eq 3 ]
+
+    local positions
+    positions=$(echo "$result" | jq -r '[.[][] | .position] | sort | join(",")')
+    [ "$positions" = "bottom-right,left,top-right" ]
 }
 
 @test "apply-layout does not kill agent panes when creating new windows" {
