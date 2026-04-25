@@ -7,10 +7,8 @@
 対象プロジェクトのルートへインストールします。
 
 ```bash
-./install.sh --project-dir ~/workspace/my-project --default-member leader
+./install.sh --project-dir ~/workspace/my-project
 ```
-
-`--default-member` は、リーダーのメンバー名です。`agents.config.json` の leader と同じ名前にしてください。省略した場合、Claude hook 側は `AI_TEAM_MEMBER` からメンバー名を解決します。
 
 インストール後、対象プロジェクトには主に以下が配置されます。
 
@@ -156,11 +154,11 @@ leader は既存の Claude Code セッションで動作する前提なので、
 ]
 ```
 
-`position` は `top-left`, `top-right`, `bottom-left`, `bottom-right`, `top`, `bottom`, `whole` を使えます。`group_id` が同じメンバーは同じ tmux window に配置されます。
+`position` は `top-left`, `top-right`, `bottom-left`, `bottom-right`, `top`, `bottom`, `left`, `right`, `whole` を使えます。`group_id` が同じメンバーは同じ tmux window に配置されます。
 
 ## 起動と復旧
 
-対象プロジェクトを tmux 上の Claude Code セッションで開き、リーダーの pane から `/team-start` を実行します。
+対象プロジェクトを tmux 上の Claude Code セッションで開き、リーダーの pane から `/team-start <session_name>` を実行します。
 
 復旧時は同じ tmux session 名のまま `/team-resume` を実行します。保存済み state は `.ai-team/<tmux-session>/` に置かれます。
 

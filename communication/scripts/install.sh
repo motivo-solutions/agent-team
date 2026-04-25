@@ -9,17 +9,12 @@ MODULE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # デフォルトの対象プロジェクト
 PROJECT_DIR="."
-DEFAULT_MEMBER=""
 
 # 引数解析
 while [ $# -gt 0 ]; do
     case "$1" in
         --project-dir)
             PROJECT_DIR="$2"
-            shift 2
-            ;;
-        --default-member)
-            DEFAULT_MEMBER="$2"
             shift 2
             ;;
         *)
@@ -85,10 +80,6 @@ fi
 
 CLAUDE_RECORD_COMMAND="bash .ai-team/scripts/mailbox-hook.sh record-prompt"
 CLAUDE_STOP_COMMAND="bash .ai-team/scripts/mailbox-hook.sh flush-reply"
-if [[ -n "${DEFAULT_MEMBER}" ]]; then
-    CLAUDE_RECORD_COMMAND+=" --default-member ${DEFAULT_MEMBER}"
-    CLAUDE_STOP_COMMAND+=" --default-member ${DEFAULT_MEMBER}"
-fi
 
 CLAUDE_RECORD_DESC="Record Mailbox-delivered prompts for auto-reply"
 CLAUDE_RECORD_HOOK="{\"hooks\":[{\"type\":\"command\",\"command\":\"${CLAUDE_RECORD_COMMAND}\"}],\"description\":\"${CLAUDE_RECORD_DESC}\"}"

@@ -83,7 +83,7 @@ sequenceDiagram
 | `send_mailbox_message.sh` | hooks / 各メンバー | `--member --to --type --message` | 送信者 outbox にメッセージファイルを書き込む |
 | `mailbox-hook.sh` | Claude / Codex hooks | `record-prompt \| flush-reply` | Mailbox 由来 turn を記録し、完了時に自動返信する |
 | `mailbox-compose` | Claude / Codex skills | なし | 明示的な新規送信時に `send_mailbox_message.sh` を呼び出す |
-| `install.sh` | セットアップ | `[--project-dir <path>] [--default-member <member>]` | communication モジュールの成果物を配置し、hook を設定する |
+| `install.sh` | セットアップ | `[--project-dir <path>]` | communication モジュールの成果物を配置し、hook を設定する |
 | `uninstall.sh` | セットアップ | `[--project-dir <path>]` | communication モジュールが配置した成果物を除去する |
 
 ### インストール配置表
@@ -102,9 +102,8 @@ sequenceDiagram
 
 ### 起動時の連携
 
-- 各エージェントは `AI_TEAM_MEMBER` または install 時に指定した `--default-member` により、自分の Mailbox hook state を分離して扱う
+- 各エージェントは `AI_TEAM_MEMBER` により、自分の Mailbox hook state を分離して扱う
 - Codex hooks の有効化は起動引数ではなく `.codex/config.toml` の feature flag で扱う
-- `--default-member` は `AI_TEAM_MEMBER` を付けずに動くセッション向けの任意設定であり、communication モジュール自体は特定メンバー名を前提にしない
 
 ### Mailbox ディレクトリ構成
 

@@ -122,8 +122,8 @@ sequenceDiagram
   { "group_id": 0, "pane_id": "%6",  "position": "top-right" },
   { "group_id": 0, "pane_id": null,  "position": "bottom-left" },
   { "group_id": 0, "pane_id": null,  "position": "bottom-right" },
-  { "group_id": 1, "pane_id": "%7",  "position": "top" },
-  { "group_id": 1, "pane_id": "%8",  "position": "bottom" },
+  { "group_id": 1, "pane_id": "%7",  "position": "left" },
+  { "group_id": 1, "pane_id": "%8",  "position": "right" },
   { "group_id": null, "pane_id": "%9", "position": null }
 ]
 ```
@@ -132,7 +132,7 @@ sequenceDiagram
 |---|---|---|
 | `group_id` | int \| null | ウィンドウ単位のグループ ID。番号が小さい順にウィンドウが並ぶ。`position` が `null` の場合は `null` |
 | `pane_id` | string \| null | 既存ペインの tmux ペイン ID（例: `%5`）。新規作成の場合は `null` |
-| `position` | string \| null | ペインの目標位置。`top-left`, `top-right`, `bottom-left`, `bottom-right`, `top`, `bottom`, `whole`（ウィンドウ全体）の 7 種類。削除する場合は `null` |
+| `position` | string \| null | ペインの目標位置。`top-left`, `top-right`, `bottom-left`, `bottom-right`, `top`, `bottom`, `left`, `right`, `whole`（ウィンドウ全体）。削除する場合は `null` |
 
 ### 適用結果（出力）
 
@@ -147,8 +147,8 @@ sequenceDiagram
     { "pane_id": "%11", "position": "bottom-right" }
   ],
   "@2": [
-    { "pane_id": "%7",  "position": "top" },
-    { "pane_id": "%8",  "position": "bottom" }
+    { "pane_id": "%7",  "position": "left" },
+    { "pane_id": "%8",  "position": "right" }
   ]
 }
 ```

@@ -34,8 +34,14 @@ teardown() {
     [ "$status" -eq 1 ]
 }
 
-@test "apply-layout rejects left without right" {
+@test "apply-layout rejects top-left without top-right" {
     local layout='[{"group_id":0,"pane_id":null,"position":"top-left"}]'
+    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
+    [ "$status" -eq 1 ]
+}
+
+@test "apply-layout rejects left without right" {
+    local layout='[{"group_id":0,"pane_id":null,"position":"left"}]'
     run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
     [ "$status" -eq 1 ]
 }
@@ -196,6 +202,27 @@ teardown() {
     local positions
     positions=$(echo "$result" | jq -r '[.[][] | .position] | sort | join(",")')
     [ "$positions" = "bottom-left,bottom-right,top-left,top-right" ]
+}
+
+@test "apply-layout arranges panes by left and right positions" {
+    local layout
+    layout=$(jq -n --arg pid "$INITIAL_PANE" '[
+        {"group_id":0, "pane_id":$pid, "position":"left"},
+        {"group_id":0, "pane_id":null, "position":"right"}
+    ]')
+
+    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
+    [ "$status" -eq 0 ]
+
+    local result
+    result=$(echo "$output" | grep -v '^\[apply-layout\]')
+    local pane_count
+    pane_count=$(echo "$result" | jq '[.[] | length] | add')
+    [ "$pane_count" -eq 2 ]
+
+    local positions
+    positions=$(echo "$result" | jq -r '[.[][] | .position] | sort | join(",")')
+    [ "$positions" = "left,right" ]
 }
 
 @test "apply-layout does not kill agent panes when creating new windows" {

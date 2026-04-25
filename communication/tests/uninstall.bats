@@ -7,7 +7,7 @@ UNINSTALL="${SCRIPT_DIR}/uninstall.sh"
 # uninstall テスト用に install 済みの一時プロジェクトを作る。
 setup() {
     TEST_PROJECT_DIR=$(mktemp -d)
-    bash "${INSTALL}" --project-dir "${TEST_PROJECT_DIR}" --default-member leader
+    bash "${INSTALL}" --project-dir "${TEST_PROJECT_DIR}"
 }
 
 # uninstall テスト後に一時プロジェクトを破棄する。
@@ -23,8 +23,6 @@ teardown() {
     [ ! -f "${TEST_PROJECT_DIR}/.ai-team/scripts/mailbox-cleanup.sh" ]
     [ ! -f "${TEST_PROJECT_DIR}/.ai-team/scripts/mailbox-hook.sh" ]
     [ ! -f "${TEST_PROJECT_DIR}/.ai-team/scripts/send_mailbox_message.sh" ]
-    [ ! -d "${TEST_PROJECT_DIR}/.agents/skills/mailbox-send" ]
-    [ ! -d "${TEST_PROJECT_DIR}/.claude/skills/mailbox-send" ]
     [ ! -d "${TEST_PROJECT_DIR}/.agents/skills/mailbox-compose" ]
     [ ! -d "${TEST_PROJECT_DIR}/.claude/skills/mailbox-compose" ]
     config_contents="$(cat "${TEST_PROJECT_DIR}/.codex/config.toml")"

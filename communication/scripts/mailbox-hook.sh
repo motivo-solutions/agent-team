@@ -3,7 +3,7 @@ set -euo pipefail
 
 # 引数:
 #   $1: mode ("record-prompt" or "flush-reply")
-#   $2...: optional flags such as --default-member <name>
+#   $2...: 未使用の追加引数
 # 戻り値:
 #   0 固定。hook 失敗で対話全体を壊さないよう、異常時も黙って終了する。
 # 処理概要:
@@ -14,19 +14,6 @@ set -euo pipefail
 mode="${1:-}"
 shift || true
 
-default_member=""
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --default-member)
-      default_member="${2:-}"
-      shift 2
-      ;;
-    *)
-      shift
-      ;;
-  esac
-done
-
 log() {
   echo "[mailbox-hook] $*" >&2
 }
@@ -36,16 +23,10 @@ log() {
 # 戻り値:
 #   stdout に現在の member 名を出力。判定できなければ空文字。
 # 処理概要:
-#   1. AI_TEAM_MEMBER があればそれを採用する。
-#   2. 無ければ install 時に指定した default_member を使う。
+#   AI_TEAM_MEMBER があればそれを採用する。
 resolve_member() {
   if [[ -n "${AI_TEAM_MEMBER:-}" ]]; then
     printf '%s\n' "${AI_TEAM_MEMBER}"
-    return 0
-  fi
-
-  if [[ -n "$default_member" ]]; then
-    printf '%s\n' "$default_member"
     return 0
   fi
 
