@@ -118,7 +118,9 @@ sequenceDiagram
 
 ### role prompt（外部注入）
 
-- `agents.config.json` の `launcher.prompt_path` で指すファイルが起動時に存在すること
+- leader を含む全メンバーの role prompt を `.ai-team/prompts/{member}.md` として配置すること
+- 各 role prompt には、メンバー間コミュニケーションに必要なチーム構成の基礎知識を含めること
+- チーム構成の基礎知識には、leader / teammate の `member` ID、各メンバーの担当領域、依頼・相談・報告時の宛先を含めること
 - prompt の内容・構造・読み込み方針（persona 参照など）は本モジュールの関心外であり、配置元のモジュール（例: roles-workflow）または利用者の責務とする
 
 ## 公開インターフェース
@@ -147,7 +149,6 @@ sequenceDiagram
 - `bridge`: bridge の配送対象に含めるなら `true`
 - `launcher`: 起動対象メンバーの CLI 定義
 - `launcher.cli`: `claude` または `codex`
-- `launcher.prompt_path`: 起動時に渡す role prompt のパス
 - `launcher.model`: 任意。エージェントごとの model 指定
 - `launcher.think_mode`: 任意。エージェントごとの think モード指定
 - `launcher.permission_mode`: Claude 用。任意
@@ -156,6 +157,7 @@ sequenceDiagram
 
 起動コマンドは runtime が `launcher` の構造化項目から自動生成する。`launch_command` のような生コマンド文字列は使わない。
 `launcher.model` / `launcher.think_mode` を省略した場合、runtime は対応する CLI フラグを付けず、各 CLI の既定設定へフォールバックする。
+role prompt は `agents.config.json` には含めず、各 `member` について `.ai-team/prompts/{member}.md` として配置する。
 
 `launcher.think_mode` は runtime 内で provider ごとのフラグへ変換される。
 - Claude: `--effort`
@@ -178,5 +180,4 @@ sequenceDiagram
 ## 起動ポリシー
 
 - 各メンバーの起動モード（権限・サンドボックス・承認ポリシー）は `agents.config.json` の `launcher` 項目で外部から指定する。team-management 自身は特定メンバーの起動モードをハードコードしない
-- 各メンバーには `launcher.prompt_path` で指定された role prompt だけを起動時に渡す
 - persona など追加の設定ファイルの読み込みは role prompt 内の参照に委ね、team-management は関与しない

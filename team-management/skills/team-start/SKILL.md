@@ -23,7 +23,15 @@ Use the installed configuration files:
 .ai-team/layouts.config.json
 ```
 
-### 3. Bootstrap Team from External Configuration
+
+### 3. Receive Leader Prompt
+
+- Resolve the leader member from `.ai-team/agents.config.json` where `leader` is `true`
+- Read `.ai-team/prompts/{leader_member}.md`
+- Treat that file as the operating prompt for the current leader session before starting teammates
+- Do not start a separate CLI for the leader
+
+### 4. Bootstrap Team from External Configuration
 
 Execute the dedicated helper script:
 
@@ -43,7 +51,7 @@ This script is responsible for:
 
 The runtime script must treat the agent composition and layout as external inputs. Do not hardcode the team structure in the skill itself.
 
-### 4. Verify Bridge
+### 5. Verify Bridge
 
 - Confirm the bridge process is running: `.ai-team/{session_name}/bridge.pid` exists and its PID is alive
 - Do not complete startup if the bridge is not running. No further ping / acknowledgement checks are performed here

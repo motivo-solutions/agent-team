@@ -33,30 +33,76 @@
 - `.ai-team/layouts.config.json`
 - `.ai-team/prompts/<member>.md`
 
-`install.sh` は generic な `agents.config.json` / `layouts.config.json` を配置します。実際のチーム構成に合わせて、この 2 つを編集し、`launcher.prompt_path` に指定した prompt ファイルを作成してください。
+`install.sh` は generic な `agents.config.json` / `layouts.config.json` を配置します。実際のチーム構成に合わせて、この 2 つを編集し、全メンバー分の prompt ファイルを `.ai-team/prompts/{member}.md` として作成してください。
 
 ## prompt ファイルを作成する
 
-各 non-leader member の起動 prompt を `.ai-team/prompts/` に作ります。
+leader を含む全 member の prompt を `.ai-team/prompts/` に作ります。ファイル名は `agents.config.json` の `member` と一致させてください。
+各 prompt には、メンバー間で依頼・報告できるように、少なくとも次の基礎知識を入れてください。
+
+- 自分の `member` ID と役割
+- leader と teammate の `member` ID
+- 各メンバーの主な担当領域
+- メンバー間の依頼・相談・報告では `member` ID で相手を指定すること
+- 迷ったら leader へ相談し、完了時は依頼元へ報告すること
 
 ```bash
 mkdir -p .ai-team/prompts
+
+cat > .ai-team/prompts/leader.md <<'EOF'
+# Leader
+
+あなたはチームのリーダー。依頼を整理し、各メンバーへ作業を依頼する。
+
+## チーム構成
+
+- leader: あなた。タスク整理、判断、メンバーへの依頼を担当する。
+- planner: 仕様整理とタスク分解を担当する。
+- builder: 実装とテストを担当する。
+
+## コミュニケーション
+
+`planner` / `builder` の member ID 宛に依頼する。
+各メンバーからの報告を受け、必要に応じて追加指示を出す。
+EOF
 
 cat > .ai-team/prompts/planner.md <<'EOF'
 # Planner
 
 あなたは仕様整理とタスク分解を担当する。
-Mailbox で届いた依頼に応答し、完了時は依頼元へ報告する。
+
+## チーム構成
+
+- leader: チームのリーダー。判断と作業依頼を担当する。
+- planner: あなた。仕様整理とタスク分解を担当する。
+- builder: 実装とテストを担当する。
+
+## コミュニケーション
+
+メンバー間の依頼・相談・報告では member ID で相手を指定する。
+作業依頼は主に `leader` から届く。実装が必要な内容は `builder` に相談できる。
+届いた依頼に応答し、完了時は依頼元へ報告する。
 EOF
 
 cat > .ai-team/prompts/builder.md <<'EOF'
 # Builder
 
 あなたは実装担当。依頼された変更を行い、テスト結果を添えて報告する。
+
+## チーム構成
+
+- leader: チームのリーダー。判断と作業依頼を担当する。
+- planner: 仕様整理とタスク分解を担当する。
+- builder: あなた。実装とテストを担当する。
+
+## コミュニケーション
+
+メンバー間の依頼・相談・報告では member ID で相手を指定する。
+作業依頼は主に `leader` から届く。仕様が曖昧な場合は `leader` または `planner` に確認する。
 EOF
 ```
 
-leader は既存の Claude Code セッションで動作する前提なので、`launcher` は不要です。leader 用の指示は通常の Claude セッション側で読み込ませてください。
+leader は既存の Claude Code セッションで動作する前提なので、`launcher` は不要です。ただし leader 用の prompt ファイルは `.ai-team/prompts/leader.md` として作成してください。
 
 ## agents.config.json を作成する
 
@@ -79,8 +125,7 @@ leader は既存の Claude Code セッションで動作する前提なので、
       "launcher": {
         "cli": "claude",
         "model": "sonnet",
-        "permission_mode": "acceptEdits",
-        "prompt_path": ".ai-team/prompts/planner.md"
+        "permission_mode": "acceptEdits"
       }
     },
     {
@@ -91,8 +136,7 @@ leader は既存の Claude Code セッションで動作する前提なので、
       "launcher": {
         "cli": "codex",
         "sandbox": "workspace-write",
-        "approval_policy": "on-request",
-        "prompt_path": ".ai-team/prompts/builder.md"
+        "approval_policy": "on-request"
       }
     }
   ]
@@ -106,7 +150,7 @@ leader は既存の Claude Code セッションで動作する前提なので、
 - `mailbox`: Mailbox ディレクトリを作るかどうか。
 - `bridge`: bridge の配送対象に含めるかどうか。
 - `launcher.cli`: `claude` または `codex`。
-- `launcher.prompt_path`: 起動時に読み込む prompt ファイル。
+- prompt ファイル: `member` 名から `.ai-team/prompts/{member}.md` を暗黙的に読み込みます。
 
 ## layouts.config.json を作成する
 

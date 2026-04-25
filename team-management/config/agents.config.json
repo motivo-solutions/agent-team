@@ -12,8 +12,7 @@
       "mailbox": true,
       "bridge": true,
       "launcher": {
-        "cli": "claude",
-        "prompt_path": ".ai-team/prompts/teammate_a.md"
+        "cli": "claude"
       }
     },
     {
@@ -22,8 +21,7 @@
       "mailbox": true,
       "bridge": true,
       "launcher": {
-        "cli": "codex",
-        "prompt_path": ".ai-team/prompts/teammate_b.md"
+        "cli": "codex"
       }
     },
     {
@@ -32,8 +30,7 @@
       "mailbox": true,
       "bridge": true,
       "launcher": {
-        "cli": "codex",
-        "prompt_path": ".ai-team/prompts/teammate_c.md"
+        "cli": "codex"
       }
     }
   ]
