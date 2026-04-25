@@ -46,6 +46,7 @@ EOF_TMUX
     export FAKE_TMUX_LOG="${TEST_LOG_DIR}/tmux.log"
 
     mkdir -p "${PROJECT_DIR}/.ai-team/prompts"
+    printf '%s\n' 'Leader prompt' > "${PROJECT_DIR}/.ai-team/prompts/leader.md"
     printf '%s\n' 'Reviewer prompt' > "${PROJECT_DIR}/.ai-team/prompts/reviewer.md"
     printf '%s\n' 'Builder prompt' > "${PROJECT_DIR}/.ai-team/prompts/builder.md"
 
@@ -62,8 +63,7 @@ EOF_TMUX
         "cli": "claude",
         "model": "claude-sonnet-4-6",
         "think_mode": "high",
-        "permission_mode": "acceptEdits",
-        "prompt_path": ".ai-team/prompts/reviewer.md"
+        "permission_mode": "acceptEdits"
       }
     },
     {
@@ -73,8 +73,7 @@ EOF_TMUX
         "model": "gpt-5.4",
         "think_mode": "xhigh",
         "sandbox": "workspace-write",
-        "approval_policy": "never",
-        "prompt_path": ".ai-team/prompts/builder.md"
+        "approval_policy": "never"
       }
     },
     {
@@ -157,15 +156,13 @@ EOF_PANES
     {
       "member": "reviewer",
       "launcher": {
-        "cli": "claude",
-        "prompt_path": ".ai-team/prompts/reviewer.md"
+        "cli": "claude"
       }
     },
     {
       "member": "builder",
       "launcher": {
-        "cli": "codex",
-        "prompt_path": ".ai-team/prompts/builder.md"
+        "cli": "codex"
       }
     }
   ]

@@ -75,8 +75,7 @@ EOF_TMUX
         "cli": "claude",
         "model": "claude-sonnet-4-6",
         "think_mode": "high",
-        "permission_mode": "acceptEdits",
-        "prompt_path": ".ai-team/prompts/reviewer.md"
+        "permission_mode": "acceptEdits"
       }
     },
     {
@@ -86,8 +85,7 @@ EOF_TMUX
         "model": "gpt-5.4",
         "think_mode": "xhigh",
         "sandbox": "workspace-write",
-        "approval_policy": "never",
-        "prompt_path": ".ai-team/prompts/builder.md"
+        "approval_policy": "never"
       }
     },
     {
@@ -160,8 +158,7 @@ EOF_STATE
         "cli": "claude",
         "model": "claude-sonnet-4-6",
         "think_mode": "high",
-        "permission_mode": "acceptEdits",
-        "prompt_path": ".ai-team/prompts/reviewer.md"
+        "permission_mode": "acceptEdits"
       }
     },
     {
@@ -171,8 +168,7 @@ EOF_STATE
         "model": "gpt-5.4",
         "think_mode": "xhigh",
         "sandbox": "workspace-write",
-        "approval_policy": "never",
-        "prompt_path": ".ai-team/prompts/builder.md"
+        "approval_policy": "never"
       }
     }
   ]

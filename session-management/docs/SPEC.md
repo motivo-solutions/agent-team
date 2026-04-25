@@ -68,7 +68,7 @@ sequenceDiagram
     SM-->>C: started / skipped / failed を含む結果 JSON
 ```
 
-- Claude は `AI_TEAM_MEMBER=<member> claude ... --append-system-prompt "$(< prompt_path)"` を送る
+- Claude は `AI_TEAM_MEMBER=<member> claude ... --append-system-prompt "$(< .ai-team/prompts/<member>.md)"` を送る
 - Codex は `AI_TEAM_MEMBER=<member> codex ... "<prompt text>"` を送る
 - start 時点では state file を直接更新しない。session ID 保存は `SessionStart` hook に委譲する
 
@@ -179,7 +179,7 @@ sequenceDiagram
 
 - リーダーは Claude Code のセッション上で動作していること。`start-agents.sh` / `resume-agents.sh` は `.ai-team/scripts/` に配置され、リーダー側の Claude Code セッションから呼び出される
 - 対象ペインが呼び出し元により事前に作成され、`pane_id` が渡されていること
-- 各メンバーの `launcher.prompt_path` が参照するファイルがプロジェクト内に存在すること
+- 起動対象メンバーの `.ai-team/prompts/{member}.md` がプロジェクト内に存在すること
 - SessionStart hook 実行時に `AI_TEAM_MEMBER` が各 CLI プロセスへ引き継がれていること
 
 ## 公開インターフェース
@@ -205,7 +205,6 @@ team-management モジュールが扱う `agents.config.json` のフォーマッ
 |---|---|
 | `members[].member` | メンバー ID。`pane_map` のキーと突合する |
 | `members[].launcher.cli` | 起動する CLI 種別（`claude` / `codex`） |
-| `members[].launcher.prompt_path` | 起動時に読む role prompt のパス |
 | `members[].launcher.model` | 任意。モデル指定 |
 | `members[].launcher.think_mode` | 任意。思考量指定 |
 | `members[].launcher.permission_mode` | 任意。Claude 用の権限モード |

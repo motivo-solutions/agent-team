@@ -30,11 +30,14 @@ teardown() {
     grep -Fq '.ai-team/scripts/team-start-runtime.sh' "$start_skill_file"
     grep -Fq '.ai-team/agents.config.json' "$start_skill_file"
     grep -Fq '.ai-team/layouts.config.json' "$start_skill_file"
+    grep -Fq '.ai-team/prompts/{leader_member}.md' "$start_skill_file"
+    ! grep -Fq '.ai-team/prompts/{member}.md' "$start_skill_file"
     grep -Fq 'The runtime script must treat the agent composition and layout as external inputs.' "$start_skill_file"
     ! grep -Fq -- '--resume' "$start_skill_file"
 
     grep -Fq '.ai-team/scripts/team-start-runtime.sh --resume' "$resume_skill_file"
     grep -Fq '.ai-team/agents.config.json' "$resume_skill_file"
+    ! grep -Fq '.ai-team/prompts/{member}.md' "$resume_skill_file"
     ! grep -Fq 'tmux rename-session' "$resume_skill_file"
 }
 
@@ -60,10 +63,6 @@ teardown() {
     run jq -e '.members[] | select(.leader == true) | .member == "leader"' "$agents_file"
     [ "$status" -eq 0 ]
     run jq -e '[.members[] | select(.leader != true) | .member] | all(startswith("teammate"))' "$agents_file"
-    [ "$status" -eq 0 ]
-
-    # launcher.prompt_path は存在するが、roles-workflow の具体ファイル名を持たない
-    run jq -e '[.members[] | select(.launcher) | .launcher.prompt_path] | all(contains("teammate"))' "$agents_file"
     [ "$status" -eq 0 ]
 
     # layout も同様に汎用メンバー名で構成されている

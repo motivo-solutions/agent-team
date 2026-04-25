@@ -79,6 +79,7 @@ validate_agents_config() {
     # Overview:
     #   1. members 配列と member 文字列を確認する。
     #   2. leader 数と member 重複を検証する。
+    #   3. 全メンバーの暗黙 role prompt が存在することを確認する。
     if ! jq -e '.members | type == "array" and length > 0' "$agents_config_path" >/dev/null; then
         die "Agents config must contain a non-empty members array"
     fi
@@ -100,6 +101,15 @@ validate_agents_config() {
     if [ "$member_count" -ne "$unique_member_count" ]; then
         die "Agents config contains duplicate member IDs"
     fi
+
+    local member
+    while IFS= read -r member; do
+        local prompt_path
+        prompt_path=".ai-team/prompts/${member}.md"
+        if [ ! -f "$prompt_path" ]; then
+            die "Prompt file not found for member ${member}: ${prompt_path}"
+        fi
+    done < <(jq -r '.members[].member' "$agents_config_path")
 }
 
 validate_layout_config() {

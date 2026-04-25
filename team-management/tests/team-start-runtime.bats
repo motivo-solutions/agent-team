@@ -44,10 +44,18 @@ EOF_TMUX
 
 }
 
+write_prompt_files() {
+    mkdir -p "${PROJECT_DIR}/.ai-team/prompts"
+    for member in leader reviewer builder observer; do
+        printf '%s\n' "${member} prompt" > "${PROJECT_DIR}/.ai-team/prompts/${member}.md"
+    done
+}
+
 # シナリオ: team-start-runtime にカスタムの構成 JSON とレイアウト JSON を与える。
 # 保証: runtime は mailbox-init、apply-layout、pane 保存、session-management への起動委譲、bridge 起動を行う。
 @test "team-start-runtime orchestrates startup and delegates agent launch to session-management" {
     prepare_tmux_stub
+    write_prompt_files
 
     export FAKE_TMUX_LOG="${TEST_LOG_DIR}/tmux.log"
     export FAKE_TMUX_SESSION_NAME="feature-session"
@@ -111,8 +119,7 @@ EOF_START_AGENTS
         "cli": "claude",
         "model": "claude-sonnet-4-6",
         "think_mode": "high",
-        "permission_mode": "acceptEdits",
-        "prompt_path": ".ai-team/prompts/reviewer.md"
+        "permission_mode": "acceptEdits"
       }
     },
     {
@@ -125,8 +132,7 @@ EOF_START_AGENTS
         "model": "gpt-5.4",
         "think_mode": "xhigh",
         "sandbox": "read-only",
-        "approval_policy": "never",
-        "prompt_path": ".ai-team/prompts/builder.md"
+        "approval_policy": "never"
       }
     },
     {
@@ -190,6 +196,7 @@ EOF_LAYOUT
 # 保証: 保存済み panes.env から pane_map を復元し、resume-agents と bridge 再起動だけを行う。
 @test "team-start-runtime resumes agents from saved pane state" {
     prepare_tmux_stub
+    write_prompt_files
 
     export FAKE_TMUX_LOG="${TEST_LOG_DIR}/resume-tmux.log"
     export FAKE_TMUX_SESSION_NAME="resume-session"
@@ -232,8 +239,7 @@ EOF_BRIDGE
         "cli": "claude",
         "model": "claude-sonnet-4-6",
         "think_mode": "high",
-        "permission_mode": "acceptEdits",
-        "prompt_path": ".ai-team/prompts/reviewer.md"
+        "permission_mode": "acceptEdits"
       }
     },
     {
@@ -246,8 +252,7 @@ EOF_BRIDGE
         "model": "gpt-5.4",
         "think_mode": "xhigh",
         "sandbox": "read-only",
-        "approval_policy": "never",
-        "prompt_path": ".ai-team/prompts/builder.md"
+        "approval_policy": "never"
       }
     },
     {
@@ -291,6 +296,7 @@ EOF_PANES
 # 保証: 委譲先の validation エラーが呼び出し元へ伝播し、bridge 起動前に処理が失敗する。
 @test "team-start-runtime surfaces delegated validation errors for duplicate panes" {
     prepare_tmux_stub
+    write_prompt_files
 
     export FAKE_TMUX_LOG="${TEST_LOG_DIR}/delegated-duplicate-tmux.log"
     export FAKE_TMUX_SESSION_NAME="duplicate-session"
@@ -343,8 +349,7 @@ EOF_BRIDGE
       "mailbox": true,
       "bridge": false,
       "launcher": {
-        "cli": "claude",
-        "prompt_path": ".ai-team/prompts/reviewer.md"
+        "cli": "claude"
       }
     },
     {
@@ -353,8 +358,7 @@ EOF_BRIDGE
       "mailbox": true,
       "bridge": true,
       "launcher": {
-        "cli": "codex",
-        "prompt_path": ".ai-team/prompts/builder.md"
+        "cli": "codex"
       }
     },
     {

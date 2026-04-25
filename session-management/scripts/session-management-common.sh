@@ -208,7 +208,7 @@ validate_agents_config_json() {
     #   非 0: 不備検出時は die() で終了。
     # Overview:
     #   1. members 配列の存在と member 文字列を確認する。
-    #   2. launcher があるメンバーは provider ごとの項目型を検証する。
+    #   2. launcher があるメンバーは provider ごとの項目型が正しいことを検証する。
     if ! jq -e '.members | type == "array" and length > 0' <<< "$AGENTS_CONFIG_JSON" >/dev/null; then
         die "Agents config must contain a non-empty members array"
     fi
@@ -227,8 +227,6 @@ validate_agents_config_json() {
                 | type == "object"
                 and .cli? != null
                 and (.cli == "claude" or .cli == "codex")
-                and .prompt_path? != null
-                and (.prompt_path | type == "string")
                 and (
                     .model? == null
                     or (.model | type == "string")
@@ -313,6 +311,37 @@ pane_id_for_member() {
     jq -r --arg member "$member" '.[$member] // empty' <<< "$PANE_MAP_JSON"
 }
 
+prompt_path_for_member() {
+    # Args:
+    #   $1: メンバー ID。
+    # Returns:
+    #   標準出力: 暗黙規約で決まる role prompt のパス。
+    # Overview:
+    #   agents.config.json には prompt path を持たせず、member ID から
+    #   `.ai-team/prompts/{member}.md` を一意に決定する。
+    local member="$1"
+
+    printf '.ai-team/prompts/%s.md\n' "$member"
+}
+
+ensure_prompt_file_exists() {
+    # Args:
+    #   $1: メンバー ID。
+    # Returns:
+    #   0: role prompt が存在する。
+    #   非 0: role prompt が存在しない。
+    # Overview:
+    #   start 時に渡す prompt が実行時 shell で欠落しないよう、送信前に検出する。
+    local member="$1"
+    local prompt_path
+
+    prompt_path="$(prompt_path_for_member "$member")"
+    if [ ! -f "$prompt_path" ]; then
+        echo "Prompt file not found for member ${member}: ${prompt_path}" >&2
+        return 1
+    fi
+}
+
 pane_current_command() {
     # Args:
     #   $1: pane ID。
@@ -360,10 +389,12 @@ build_claude_start_command() {
     local command_text
 
     member="$(jq -r '.member' <<< "$row_json")"
-    prompt_path="$(jq -r '.launcher.prompt_path' <<< "$row_json")"
+    prompt_path="$(prompt_path_for_member "$member")"
     model="$(jq -r '.launcher.model // empty' <<< "$row_json")"
     think_mode="$(jq -r '.launcher.think_mode // empty' <<< "$row_json")"
     permission_mode="$(jq -r '.launcher.permission_mode // empty' <<< "$row_json")"
+
+    ensure_prompt_file_exists "$member"
 
     command_text="AI_TEAM_MEMBER=$(shell_quote "$member") claude"
 
@@ -449,7 +480,8 @@ build_codex_start_command() {
     local command_text
 
     member="$(jq -r '.member' <<< "$row_json")"
-    prompt_path="$(jq -r '.launcher.prompt_path' <<< "$row_json")"
+    prompt_path="$(prompt_path_for_member "$member")"
+    ensure_prompt_file_exists "$member"
     prompt_text="$(cat "$prompt_path")"
     model="$(jq -r '.launcher.model // empty' <<< "$row_json")"
     think_mode="$(jq -r '.launcher.think_mode // empty' <<< "$row_json")"
