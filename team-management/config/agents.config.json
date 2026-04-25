@@ -2,15 +2,11 @@
   "members": [
     {
       "member": "leader",
-      "leader": true,
-      "mailbox": true,
-      "bridge": true
+      "leader": true
     },
     {
       "member": "teammate_a",
       "leader": false,
-      "mailbox": true,
-      "bridge": true,
       "launcher": {
         "cli": "claude"
       }
@@ -18,8 +14,6 @@
     {
       "member": "teammate_b",
       "leader": false,
-      "mailbox": true,
-      "bridge": true,
       "launcher": {
         "cli": "codex"
       }
@@ -27,8 +21,6 @@
     {
       "member": "teammate_c",
       "leader": false,
-      "mailbox": true,
-      "bridge": true,
       "launcher": {
         "cli": "codex"
       }

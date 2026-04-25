@@ -370,14 +370,13 @@ prepare_bridge_mappings() {
     # Returns:
     #   なし。
     # Overview:
-    #   agents_config の `bridge == true` なメンバーだけを `member:pane_id` 形式へ変換する。
+    #   全メンバーを `member:pane_id` 形式へ変換する。
     local member
 
     BRIDGE_MAPPINGS=()
-    while IFS= read -r member; do
-        [ -z "$member" ] && continue
+    for member in "${ALL_MEMBERS[@]}"; do
         BRIDGE_MAPPINGS+=("${member}:${PANE_IDS_BY_MEMBER[$member]}")
-    done < <(jq -r '.members[] | select(.bridge == true) | .member' "$agents_config_path")
+    done
 }
 
 start_mode() {
@@ -391,7 +390,6 @@ start_mode() {
     #   2. pane_map を解決して保存する。
     #   3. session-management へ teammate 起動を委譲し、bridge を起動する。
     local member
-    local mailbox_members=()
 
     if [ -z "${TMUX_PANE:-}" ]; then
         die "TMUX_PANE is required for startup"
@@ -400,11 +398,7 @@ start_mode() {
     validate_layout_config
     PANE_IDS_BY_MEMBER["$LEADER_MEMBER"]="$TMUX_PANE"
 
-    while IFS= read -r member; do
-        [ -n "$member" ] && mailbox_members+=("$member")
-    done < <(jq -r '.members[] | select(.mailbox == true) | .member' "$agents_config_path")
-
-    bash .ai-team/scripts/mailbox-init.sh "${mailbox_members[@]}"
+    bash .ai-team/scripts/mailbox-init.sh "${ALL_MEMBERS[@]}"
     LAYOUT_RESULT_JSON="$(bash .ai-team/scripts/apply-layout.sh "$(layout_input_json)" "$SESSION_NAME")"
 
     while IFS= read -r member; do

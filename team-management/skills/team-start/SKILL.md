@@ -23,7 +23,6 @@ Use the installed configuration files:
 .ai-team/layouts.config.json
 ```
 
-
 ### 3. Receive Leader Prompt
 
 - Resolve the leader member from `.ai-team/agents.config.json` where `leader` is `true`
@@ -43,7 +42,7 @@ Execute the dedicated helper script:
 
 This script is responsible for:
 
-- Running `.ai-team/scripts/mailbox-init.sh` for the configured members
+- Running `.ai-team/scripts/mailbox-init.sh` for all configured members
 - Running `.ai-team/scripts/apply-layout.sh` with the configured layout
 - Persisting pane IDs to `.ai-team/{session_name}/panes.env`
 - Starting each configured non-leader member in its pane
