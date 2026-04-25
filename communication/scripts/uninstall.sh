@@ -27,8 +27,6 @@ rm -f "${PROJECT_DIR}/.ai-team/scripts/mailbox-init.sh"
 rm -f "${PROJECT_DIR}/.ai-team/scripts/mailbox-cleanup.sh"
 rm -f "${PROJECT_DIR}/.ai-team/scripts/mailbox-hook.sh"
 rm -f "${PROJECT_DIR}/.ai-team/scripts/send_mailbox_message.sh"
-rm -rf "${PROJECT_DIR}/.agents/skills/mailbox-send"
-rm -rf "${PROJECT_DIR}/.claude/skills/mailbox-send"
 rm -rf "${PROJECT_DIR}/.agents/skills/mailbox-compose"
 rm -rf "${PROJECT_DIR}/.claude/skills/mailbox-compose"
 

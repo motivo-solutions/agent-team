@@ -1,9 +1,13 @@
 ---
 name: team-start
 description: Start the team and establish Mailbox-based coordination across tmux panes
+arguments:
+  - name: session_name
+    description: tmux session name for this team session
+    required: true
 ---
 
-# /team-start
+# /team-start <session_name>
 
 Mailbox ベースのチーム開発セッションを起動する。
 
@@ -11,8 +15,8 @@ Mailbox ベースのチーム開発セッションを起動する。
 
 ### 1. Determine Session Name
 
-- Generate a kebab-case task title from the user's request
-- Rename the tmux session with `tmux rename-session {title}`
+- Use the `session_name` argument as the tmux session name
+- Rename the tmux session with `tmux rename-session "$session_name"`
 
 ### 2. Prepare Configuration Files
 

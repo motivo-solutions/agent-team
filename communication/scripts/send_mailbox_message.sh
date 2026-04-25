@@ -8,7 +8,7 @@ set -euo pipefail
 # 処理概要:
 #   呼び出し側で継続不能な入力不備や実行環境不備を一元的に終了させる。
 die() {
-    echo "[mailbox-send] Error: $*" >&2
+    echo "[send-mailbox-message] Error: $*" >&2
     exit 1
 }
 

@@ -86,6 +86,7 @@ for group_id in $GROUP_LIST; do
 
     # Validate position combinations
     HAS_TOP=false; HAS_BOTTOM=false
+    HAS_LEFT=false; HAS_RIGHT=false
     HAS_TOP_LEFT=false; HAS_TOP_RIGHT=false
     HAS_BOTTOM_LEFT=false; HAS_BOTTOM_RIGHT=false
 
@@ -93,6 +94,8 @@ for group_id in $GROUP_LIST; do
         case "$pos" in
             top)          HAS_TOP=true ;;
             bottom)       HAS_BOTTOM=true ;;
+            left)         HAS_LEFT=true ;;
+            right)        HAS_RIGHT=true ;;
             top-left)     HAS_TOP_LEFT=true ;;
             top-right)    HAS_TOP_RIGHT=true ;;
             bottom-left)  HAS_BOTTOM_LEFT=true ;;
@@ -101,9 +104,13 @@ for group_id in $GROUP_LIST; do
         esac
     done
 
-    # top/bottom and top-left/top-right/bottom-left/bottom-right are conflicting
-    if [[ "$HAS_TOP" = true || "$HAS_BOTTOM" = true ]] && [[ "$HAS_TOP_LEFT" = true || "$HAS_TOP_RIGHT" = true || "$HAS_BOTTOM_LEFT" = true || "$HAS_BOTTOM_RIGHT" = true ]]; then
-        die "Conflicting positions in group $group_id: cannot mix top/bottom with top-left/top-right/bottom-left/bottom-right"
+    # 2分割と4分割の position は混在させない。
+    if [[ "$HAS_TOP" = true || "$HAS_BOTTOM" = true || "$HAS_LEFT" = true || "$HAS_RIGHT" = true ]] && [[ "$HAS_TOP_LEFT" = true || "$HAS_TOP_RIGHT" = true || "$HAS_BOTTOM_LEFT" = true || "$HAS_BOTTOM_RIGHT" = true ]]; then
+        die "Conflicting positions in group $group_id: cannot mix 2-pane positions with top-left/top-right/bottom-left/bottom-right"
+    fi
+
+    if [[ "$HAS_TOP" = true || "$HAS_BOTTOM" = true ]] && [[ "$HAS_LEFT" = true || "$HAS_RIGHT" = true ]]; then
+        die "Conflicting positions in group $group_id: cannot mix top/bottom with left/right"
     fi
 
     # top requires bottom (and vice versa)
@@ -112,6 +119,14 @@ for group_id in $GROUP_LIST; do
     fi
     if [[ "$HAS_BOTTOM" = true && "$HAS_TOP" != true ]]; then
         die "Position 'bottom' requires 'top' in group $group_id"
+    fi
+
+    # left requires right (and vice versa)
+    if [[ "$HAS_LEFT" = true && "$HAS_RIGHT" != true ]]; then
+        die "Position 'left' requires 'right' in group $group_id"
+    fi
+    if [[ "$HAS_RIGHT" = true && "$HAS_LEFT" != true ]]; then
+        die "Position 'right' requires 'left' in group $group_id"
     fi
 
     # top-left/top-right must come in pairs
@@ -272,6 +287,7 @@ done
 # Position priority mapping
 # Positions in tiled layout:
 #   2 panes (top/bottom): select-layout even-vertical
+#   2 panes (left/right): select-layout even-horizontal
 #   4 panes (quadrant): select-layout tiled
 #   whole: 1 pane
 
@@ -304,15 +320,25 @@ for gid in $GROUP_IDS; do
         # whole: do nothing (single pane)
         :
     elif [ "$ENTRY_COUNT" -eq 2 ]; then
-        # top/bottom: even-vertical
-        tmux select-layout -t "${SESSION}:${TARGET_WINDOW}" even-vertical
+        HAS_LEFT_RIGHT=false
+        for pos in "${POSITIONS[@]}"; do
+            if [ "$pos" = "left" ] || [ "$pos" = "right" ]; then
+                HAS_LEFT_RIGHT=true
+            fi
+        done
+
+        if [ "$HAS_LEFT_RIGHT" = true ]; then
+            tmux select-layout -t "${SESSION}:${TARGET_WINDOW}" even-horizontal
+        else
+            tmux select-layout -t "${SESSION}:${TARGET_WINDOW}" even-vertical
+        fi
     elif [ "$ENTRY_COUNT" -eq 4 ]; then
         # 4-way split: tiled
         tmux select-layout -t "${SESSION}:${TARGET_WINDOW}" tiled
     fi
 
     # Sort panes based on position order
-    # Position order: top-left(0), top-right(1), bottom-left(2), bottom-right(3), top(0), bottom(1), whole(0)
+    # Position order: top-left(0), top-right(1), bottom-left(2), bottom-right(3), top/left(0), bottom/right(1), whole(0)
     # Rearrange pane_ids by position order and use swap-pane to reorder
 
     # Re-fetch (pane list after splits)
@@ -330,6 +356,8 @@ for gid in $GROUP_IDS; do
             bottom-right) echo 3 ;;
             top)          echo 0 ;;
             bottom)       echo 1 ;;
+            left)         echo 0 ;;
+            right)        echo 1 ;;
             whole)        echo 0 ;;
             *)            echo 99 ;;
         esac

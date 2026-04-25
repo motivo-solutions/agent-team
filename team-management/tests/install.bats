@@ -31,7 +31,11 @@ teardown() {
     grep -Fq '.ai-team/agents.config.json' "$start_skill_file"
     grep -Fq '.ai-team/layouts.config.json' "$start_skill_file"
     grep -Fq '.ai-team/prompts/{leader_member}.md' "$start_skill_file"
+    grep -Fq '# /team-start <session_name>' "$start_skill_file"
+    grep -Fq 'name: session_name' "$start_skill_file"
+    grep -Fq 'tmux rename-session "$session_name"' "$start_skill_file"
     ! grep -Fq '.ai-team/prompts/{member}.md' "$start_skill_file"
+    ! grep -Fq 'Generate a kebab-case task title' "$start_skill_file"
     grep -Fq 'The runtime script must treat the agent composition and layout as external inputs.' "$start_skill_file"
     ! grep -Fq -- '--resume' "$start_skill_file"
 

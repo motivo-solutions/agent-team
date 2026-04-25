@@ -45,8 +45,8 @@ sequenceDiagram
     participant CM as 通信基盤
     participant BR as bridge
 
-    U->>A: /team-start
-    A->>A: セッション名を決定
+    U->>A: /team-start session_name
+    A->>A: session_name に tmux session 名を変更
     A->>A: team-start-runtime.sh を実行
     A->>CM: Mailbox 初期化
     A->>TL: layout を適用し member ごとの pane_id を取得
@@ -127,7 +127,7 @@ sequenceDiagram
 
 | コマンド | 種別 | 説明 |
 |---|---|---|
-| `/team-start` | skill | チーム全体を新規起動する |
+| `/team-start` | skill | `session_name` を受け取り、チーム全体を新規起動する |
 | `/team-resume` | skill | 保存済み状態を使ってチームを復旧する |
 | `/team-stop` | skill | チーム全体を停止する |
 
@@ -169,7 +169,7 @@ role prompt は `agents.config.json` には含めず、各 `member` について
 |---|---|---|
 | `member` | string | メンバー ID。`agents.config.json` の `member` と一致する必要がある |
 | `group_id` | int | ウィンドウ単位のグループ ID。番号が小さい順にウィンドウが並ぶ |
-| `position` | string | ペインの目標位置（`top-left`, `top-right`, `bottom-left`, `bottom-right`, `top`, `bottom`, `whole`） |
+| `position` | string | ペインの目標位置（`top-left`, `top-right`, `bottom-left`, `bottom-right`, `top`, `bottom`, `left`, `right`, `whole`） |
 
 - `agents.config.json` と `layouts.config.json` のメンバー集合は一致していなければならない
 - `pane_id` はインターフェースとしては指定せず、runtime が `agents.config.json` の `leader` 情報から自動で解決する（リーダーは実行時の `TMUX_PANE`、非リーダーは新規作成用に `null`）
