@@ -1,0 +1,6 @@
+[
+  { "member": "leader",     "group_id": 0, "position": "top-left" },
+  { "member": "teammate_a", "group_id": 0, "position": "top-right" },
+  { "member": "teammate_b", "group_id": 0, "position": "bottom-left" },
+  { "member": "teammate_c", "group_id": 0, "position": "bottom-right" }
+]
