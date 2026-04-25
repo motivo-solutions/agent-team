@@ -106,15 +106,11 @@ EOF_START_AGENTS
   "members": [
     {
       "member": "leader",
-      "leader": true,
-      "mailbox": true,
-      "bridge": true
+      "leader": true
     },
     {
       "member": "reviewer",
       "leader": false,
-      "mailbox": true,
-      "bridge": false,
       "launcher": {
         "cli": "claude",
         "model": "claude-sonnet-4-6",
@@ -125,8 +121,6 @@ EOF_START_AGENTS
     {
       "member": "builder",
       "leader": false,
-      "mailbox": true,
-      "bridge": true,
       "launcher": {
         "cli": "codex",
         "model": "gpt-5.4",
@@ -137,9 +131,7 @@ EOF_START_AGENTS
     },
     {
       "member": "observer",
-      "leader": false,
-      "mailbox": false,
-      "bridge": false
+      "leader": false
     }
   ]
 }
@@ -160,7 +152,7 @@ EOF_LAYOUT
     grep -Fxq 'leader' "$MAILBOX_INIT_LOG"
     grep -Fxq 'reviewer' "$MAILBOX_INIT_LOG"
     grep -Fxq 'builder' "$MAILBOX_INIT_LOG"
-    ! grep -Fxq 'observer' "$MAILBOX_INIT_LOG"
+    grep -Fxq 'observer' "$MAILBOX_INIT_LOG"
 
     run jq -e 'length == 4 and all(has("member") | not)' "$APPLY_LAYOUT_JSON_LOG"
     [ "$status" -eq 0 ]
@@ -184,9 +176,9 @@ EOF_LAYOUT
 
     grep -Fxq '.ai-team/feature-session/mailbox' "$BRIDGE_ARGS_LOG"
     grep -Fxq 'leader:%leader' "$BRIDGE_ARGS_LOG"
+    grep -Fxq 'reviewer:%reviewer' "$BRIDGE_ARGS_LOG"
     grep -Fxq 'builder:%builder' "$BRIDGE_ARGS_LOG"
-    ! grep -Fxq 'reviewer:%reviewer' "$BRIDGE_ARGS_LOG"
-    ! grep -Fxq 'observer:%observer' "$BRIDGE_ARGS_LOG"
+    grep -Fxq 'observer:%observer' "$BRIDGE_ARGS_LOG"
 
     [ -f "${PROJECT_DIR}/.ai-team/feature-session/bridge.pid" ]
     ! grep -Fq 'run-shell' "$FAKE_TMUX_LOG"
@@ -226,15 +218,11 @@ EOF_BRIDGE
   "members": [
     {
       "member": "leader",
-      "leader": true,
-      "mailbox": true,
-      "bridge": true
+      "leader": true
     },
     {
       "member": "reviewer",
       "leader": false,
-      "mailbox": true,
-      "bridge": false,
       "launcher": {
         "cli": "claude",
         "model": "claude-sonnet-4-6",
@@ -245,8 +233,6 @@ EOF_BRIDGE
     {
       "member": "builder",
       "leader": false,
-      "mailbox": true,
-      "bridge": true,
       "launcher": {
         "cli": "codex",
         "model": "gpt-5.4",
@@ -257,9 +243,7 @@ EOF_BRIDGE
     },
     {
       "member": "observer",
-      "leader": false,
-      "mailbox": false,
-      "bridge": false
+      "leader": false
     }
   ]
 }
@@ -285,9 +269,9 @@ EOF_PANES
 
     grep -Fxq '.ai-team/resume-session/mailbox' "$BRIDGE_ARGS_LOG"
     grep -Fxq 'leader:%leader' "$BRIDGE_ARGS_LOG"
+    grep -Fxq 'reviewer:%reviewer' "$BRIDGE_ARGS_LOG"
     grep -Fxq 'builder:%builder' "$BRIDGE_ARGS_LOG"
-    ! grep -Fxq 'reviewer:%reviewer' "$BRIDGE_ARGS_LOG"
-    ! grep -Fxq 'observer:%observer' "$BRIDGE_ARGS_LOG"
+    grep -Fxq 'observer:%observer' "$BRIDGE_ARGS_LOG"
 
     [ -f "${PROJECT_DIR}/.ai-team/resume-session/bridge.pid" ]
 }
@@ -339,15 +323,11 @@ EOF_BRIDGE
   "members": [
     {
       "member": "leader",
-      "leader": true,
-      "mailbox": true,
-      "bridge": true
+      "leader": true
     },
     {
       "member": "reviewer",
       "leader": false,
-      "mailbox": true,
-      "bridge": false,
       "launcher": {
         "cli": "claude"
       }
@@ -355,17 +335,13 @@ EOF_BRIDGE
     {
       "member": "builder",
       "leader": false,
-      "mailbox": true,
-      "bridge": true,
       "launcher": {
         "cli": "codex"
       }
     },
     {
       "member": "observer",
-      "leader": false,
-      "mailbox": false,
-      "bridge": false
+      "leader": false
     }
   ]
 }
@@ -387,6 +363,7 @@ EOF_LAYOUT
     grep -Fxq 'leader' "$MAILBOX_INIT_LOG"
     grep -Fxq 'reviewer' "$MAILBOX_INIT_LOG"
     grep -Fxq 'builder' "$MAILBOX_INIT_LOG"
+    grep -Fxq 'observer' "$MAILBOX_INIT_LOG"
     [ ! -f "${PROJECT_DIR}/.ai-team/duplicate-session/bridge.pid" ]
     [ ! -f "$BRIDGE_ARGS_LOG" ]
 }

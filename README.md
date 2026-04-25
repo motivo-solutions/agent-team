@@ -113,15 +113,11 @@ leader は既存の Claude Code セッションで動作する前提なので、
   "members": [
     {
       "member": "leader",
-      "leader": true,
-      "mailbox": true,
-      "bridge": true
+      "leader": true
     },
     {
       "member": "planner",
       "leader": false,
-      "mailbox": true,
-      "bridge": true,
       "launcher": {
         "cli": "claude",
         "model": "sonnet",
@@ -131,8 +127,6 @@ leader は既存の Claude Code セッションで動作する前提なので、
     {
       "member": "builder",
       "leader": false,
-      "mailbox": true,
-      "bridge": true,
       "launcher": {
         "cli": "codex",
         "sandbox": "workspace-write",
@@ -147,8 +141,6 @@ leader は既存の Claude Code セッションで動作する前提なので、
 
 - `member`: メンバー ID。Mailbox や pane state のキーになります。
 - `leader`: リーダーだけ `true`。リーダーは現在の Claude Code pane を使うため `launcher` は不要です。
-- `mailbox`: Mailbox ディレクトリを作るかどうか。
-- `bridge`: bridge の配送対象に含めるかどうか。
 - `launcher.cli`: `claude` または `codex`。
 - prompt ファイル: `member` 名から `.ai-team/prompts/{member}.md` を暗黙的に読み込みます。
 

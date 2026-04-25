@@ -137,16 +137,14 @@ sequenceDiagram
 - 長い処理は `.ai-team/scripts/team-start-runtime.sh` / `.ai-team/scripts/team-stop-runtime.sh` に切り出して実行する
 - skill には手順と helper script 呼び出しだけを残す
 - エージェント構成とレイアウトは `.ai-team/` 直下の JSON ファイルから外部入力として与える
-- `team-start-runtime.sh` は引数で受け取った JSON を使って `mailbox-init.sh` と `apply-layout.sh` を実行する
+- `team-start-runtime.sh` は引数で受け取った JSON を使って、全メンバーの Mailbox 初期化と layout 適用を実行する
 - `team-resume` は tmux session 名を変更せず、`team-start-runtime.sh --resume` を使って保存済み state から復旧する
-- bridge は `setsid` で tmux から切り離してバックグラウンド起動する
+- bridge は全メンバーを配送対象として、`setsid` で tmux から切り離してバックグラウンド起動する
 
 ## `agents.config.json` 形式
 
 - `member`: メンバー ID
 - `leader`: リーダーなら `true`
-- `mailbox`: Mailbox を作るなら `true`
-- `bridge`: bridge の配送対象に含めるなら `true`
 - `launcher`: 起動対象メンバーの CLI 定義
 - `launcher.cli`: `claude` または `codex`
 - `launcher.model`: 任意。エージェントごとの model 指定
