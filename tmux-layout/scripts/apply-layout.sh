@@ -271,12 +271,241 @@ done
 
 # --- Step 5: Adjust pane arrangement within windows ---
 
-# Position priority mapping
-# Positions in tiled layout:
-#   2 panes (top/bottom): select-layout even-vertical
-#   2 panes (left/right): select-layout even-horizontal
-#   4 panes (quadrant): select-layout tiled
-#   whole: 1 pane
+layout_checksum() {
+    # Args:
+    #   $1: checksum を除いた tmux layout 文字列。
+    # Returns:
+    #   標準出力: tmux が select-layout で要求する 4 桁 16 進 checksum。
+    # Overview:
+    #   tmux の layout checksum と同じ計算で、任意の分割形状を安全に適用する。
+    local layout="$1"
+    local checksum=0
+    local i
+    local ord
+
+    LC_CTYPE=C
+    for ((i = 0; i < ${#layout}; i++)); do
+        printf -v ord '%d' "'${layout:i:1}"
+        checksum=$(( ((checksum >> 1) | ((checksum & 1) << 15)) + ord ))
+        checksum=$(( checksum & 0xffff ))
+    done
+
+    printf '%04x\n' "$checksum"
+}
+
+pane_layout_id() {
+    # Args:
+    #   $1: tmux pane_id（例: %5）。
+    # Returns:
+    #   標準出力: tmux layout 文字列で使う数値 ID。
+    local pane_id="$1"
+    echo "${pane_id#%}"
+}
+
+position_rect() {
+    # Args:
+    #   $1: position。
+    # Returns:
+    #   標準出力: row_start col_start row_end col_end。
+    # Overview:
+    #   position を 2x2 の基本領域上の矩形へ変換する。
+    case "$1" in
+        whole) echo "0 0 2 2" ;;
+        top) echo "0 0 1 2" ;;
+        bottom) echo "1 0 2 2" ;;
+        left) echo "0 0 2 1" ;;
+        right) echo "0 1 2 2" ;;
+        top-left) echo "0 0 1 1" ;;
+        top-right) echo "0 1 1 2" ;;
+        bottom-left) echo "1 0 2 1" ;;
+        bottom-right) echo "1 1 2 2" ;;
+        *) return 1 ;;
+    esac
+}
+
+split_region_positions() {
+    # Args:
+    #   $1: 分割軸（row または col）。
+    #   $2: 分割境界。
+    #   $3...: 分割対象の position 一覧。
+    # Returns:
+    #   分割できれば 0、できなければ 1。結果は SPLIT_FIRST / SPLIT_SECOND に入る。
+    # Overview:
+    #   position の矩形が分割境界をまたがない場合だけ、前半・後半の領域に分類する。
+    local axis="$1"
+    local cut="$2"
+    local pos
+    local rect_row_start
+    local rect_col_start
+    local rect_row_end
+    local rect_col_end
+    local start
+    local end
+    shift 2
+
+    SPLIT_FIRST=()
+    SPLIT_SECOND=()
+
+    for pos in "$@"; do
+        read -r rect_row_start rect_col_start rect_row_end rect_col_end <<< "$(position_rect "$pos")"
+        if [ "$axis" = "col" ]; then
+            start="$rect_col_start"
+            end="$rect_col_end"
+        else
+            start="$rect_row_start"
+            end="$rect_row_end"
+        fi
+
+        if [ "$start" -lt "$cut" ] && [ "$end" -gt "$cut" ]; then
+            return 1
+        elif [ "$end" -le "$cut" ]; then
+            SPLIT_FIRST+=("$pos")
+        else
+            SPLIT_SECOND+=("$pos")
+        fi
+    done
+
+    [ "${#SPLIT_FIRST[@]}" -gt 0 ] && [ "${#SPLIT_SECOND[@]}" -gt 0 ]
+}
+
+layout_leaf_positions() {
+    # Args:
+    #   $1-$4: 対象領域の row_start col_start row_end col_end。
+    #   $5...: 対象領域に含まれる position 一覧。
+    # Returns:
+    #   標準出力: tmux layout の leaf order に並べた position。
+    # Overview:
+    #   build_region_layout と同じ分割規則で、pane を事前に並べ替えるための順序を求める。
+    local row_start="$1"
+    local col_start="$2"
+    local row_end="$3"
+    local col_end="$4"
+    local cut
+    local -a first_positions
+    local -a second_positions
+    shift 4
+
+    if [ "$#" -eq 1 ]; then
+        printf '%s\n' "$1"
+        return
+    fi
+
+    if [ $((col_end - col_start)) -gt 1 ]; then
+        cut=$((col_start + 1))
+        if split_region_positions col "$cut" "$@"; then
+            first_positions=("${SPLIT_FIRST[@]}")
+            second_positions=("${SPLIT_SECOND[@]}")
+            layout_leaf_positions "$row_start" "$col_start" "$row_end" "$cut" "${first_positions[@]}"
+            layout_leaf_positions "$row_start" "$cut" "$row_end" "$col_end" "${second_positions[@]}"
+            return
+        fi
+    fi
+
+    if [ $((row_end - row_start)) -gt 1 ]; then
+        cut=$((row_start + 1))
+        if split_region_positions row "$cut" "$@"; then
+            first_positions=("${SPLIT_FIRST[@]}")
+            second_positions=("${SPLIT_SECOND[@]}")
+            layout_leaf_positions "$row_start" "$col_start" "$cut" "$col_end" "${first_positions[@]}"
+            layout_leaf_positions "$cut" "$col_start" "$row_end" "$col_end" "${second_positions[@]}"
+            return
+        fi
+    fi
+
+    die "Cannot order tmux layout positions: $*"
+}
+
+build_region_layout() {
+    # Args:
+    #   $1-$4: 対象領域の row_start col_start row_end col_end。
+    #   $5-$8: 対象領域の width height x y。
+    #   $9...: 対象領域に含まれる position 一覧。
+    # Returns:
+    #   標準出力: checksum を除いた tmux layout 文字列。
+    # Overview:
+    #   1. position の矩形を、重ならない縦または横の 2 領域へ分割する。
+    #   2. 分割できなくなるまで再帰し、葉を pane_id に変換する。
+    local row_start="$1"
+    local col_start="$2"
+    local row_end="$3"
+    local col_end="$4"
+    local width="$5"
+    local height="$6"
+    local x="$7"
+    local y="$8"
+    shift 8
+
+    if [ "$#" -eq 1 ]; then
+        printf '%sx%s,%s,%s,%s' "$width" "$height" "$x" "$y" "$(pane_layout_id "${PANE_BY_POSITION[$1]}")"
+        return
+    fi
+
+    local cut
+    local first_layout
+    local second_layout
+    local first_width
+    local second_width
+    local second_x
+    local first_height
+    local second_height
+    local second_y
+    local -a first_positions
+    local -a second_positions
+
+    if [ $((col_end - col_start)) -gt 1 ]; then
+        cut=$((col_start + 1))
+        if split_region_positions col "$cut" "$@"; then
+            first_positions=("${SPLIT_FIRST[@]}")
+            second_positions=("${SPLIT_SECOND[@]}")
+            first_width=$(( (width - 1) / 2 ))
+            second_width=$(( width - first_width - 1 ))
+            second_x=$(( x + first_width + 1 ))
+            first_layout=$(build_region_layout "$row_start" "$col_start" "$row_end" "$cut" "$first_width" "$height" "$x" "$y" "${first_positions[@]}")
+            second_layout=$(build_region_layout "$row_start" "$cut" "$row_end" "$col_end" "$second_width" "$height" "$second_x" "$y" "${second_positions[@]}")
+            printf '%sx%s,%s,%s{%s,%s}' "$width" "$height" "$x" "$y" "$first_layout" "$second_layout"
+            return
+        fi
+    fi
+
+    if [ $((row_end - row_start)) -gt 1 ]; then
+        cut=$((row_start + 1))
+        if split_region_positions row "$cut" "$@"; then
+            first_positions=("${SPLIT_FIRST[@]}")
+            second_positions=("${SPLIT_SECOND[@]}")
+            first_height=$(( (height - 1) / 2 ))
+            second_height=$(( height - first_height - 1 ))
+            second_y=$(( y + first_height + 1 ))
+            first_layout=$(build_region_layout "$row_start" "$col_start" "$cut" "$col_end" "$width" "$first_height" "$x" "$y" "${first_positions[@]}")
+            second_layout=$(build_region_layout "$cut" "$col_start" "$row_end" "$col_end" "$width" "$second_height" "$x" "$second_y" "${second_positions[@]}")
+            printf '%sx%s,%s,%s[%s,%s]' "$width" "$height" "$x" "$y" "$first_layout" "$second_layout"
+            return
+        fi
+    fi
+
+    die "Cannot build tmux layout for positions: $*"
+}
+
+apply_tmux_layout() {
+    # Args:
+    #   $1: tmux window_id。
+    #   $2...: position 一覧。
+    # Returns:
+    #   なし。
+    # Overview:
+    #   2x2 の基本領域を再帰的に分割し、任意の非重複 position 構成を tmux layout に変換する。
+    local target_window="$1"
+    local window_width
+    local window_height
+    local layout_body
+    local layout_checksum_value
+    shift
+
+    read -r window_width window_height <<< "$(tmux display-message -p -t "${SESSION}:${target_window}" '#{window_width} #{window_height}')"
+    layout_body=$(build_region_layout 0 0 2 2 "$window_width" "$window_height" 0 0 "$@")
+    layout_checksum_value=$(layout_checksum "$layout_body")
+
+    tmux select-layout -t "${SESSION}:${target_window}" "${layout_checksum_value},${layout_body}"
+}
 
 # Build result JSON
 RESULT_JSON="{}"
@@ -302,53 +531,11 @@ for gid in $GROUP_IDS; do
         POSITIONS+=($(echo "$GROUP_ENTRIES" | jq -r ".[$i].position"))
     done
 
-    # Apply layout
-    if [ "$ENTRY_COUNT" -eq 1 ]; then
-        # whole: do nothing (single pane)
-        :
-    elif [ "$ENTRY_COUNT" -eq 2 ]; then
-        HAS_LEFT_RIGHT=false
-        for pos in "${POSITIONS[@]}"; do
-            if [ "$pos" = "left" ] || [ "$pos" = "right" ]; then
-                HAS_LEFT_RIGHT=true
-            fi
-        done
-
-        if [ "$HAS_LEFT_RIGHT" = true ]; then
-            tmux select-layout -t "${SESSION}:${TARGET_WINDOW}" even-horizontal
-        else
-            tmux select-layout -t "${SESSION}:${TARGET_WINDOW}" even-vertical
-        fi
-    elif [ "$ENTRY_COUNT" -eq 4 ]; then
-        # 4-way split: tiled
-        tmux select-layout -t "${SESSION}:${TARGET_WINDOW}" tiled
-    fi
-
-    # Sort panes based on position order
-    # Position order: top-left(0), top-right(1), bottom-left(2), bottom-right(3), top/left(0), bottom/right(1), whole(0)
-    # Rearrange pane_ids by position order and use swap-pane to reorder
-
     # Re-fetch (pane list after splits)
     CURRENT_PANES=()
     while IFS= read -r pid; do
         [ -n "$pid" ] && CURRENT_PANES+=("$pid")
     done <<< "$(tmux list-panes -t "${SESSION}:${TARGET_WINDOW}" -F '#{pane_id}')"
-
-    # Position -> order mapping
-    position_order() {
-        case "$1" in
-            top-left)     echo 0 ;;
-            top-right)    echo 1 ;;
-            bottom-left)  echo 2 ;;
-            bottom-right) echo 3 ;;
-            top)          echo 0 ;;
-            bottom)       echo 1 ;;
-            left)         echo 0 ;;
-            right)        echo 1 ;;
-            whole)        echo 0 ;;
-            *)            echo 99 ;;
-        esac
-    }
 
     # Map existing pane IDs to new pane IDs
     # Existing panes: those with non-null pane_id in the layout
@@ -384,24 +571,29 @@ for gid in $GROUP_IDS; do
         fi
     done
 
-    # Create a pane list sorted by position
-    # (order, pane_id, position) list
-    SORTED_ENTRIES=()
+    # position ごとに適用対象の pane_id を割り当てる。
+    declare -A PANE_BY_POSITION=()
     for i in "${!KNOWN_PANES[@]}"; do
-        ORD=$(position_order "${KNOWN_POSITIONS[$i]}")
-        SORTED_ENTRIES+=("$ORD:${KNOWN_PANES[$i]}:${KNOWN_POSITIONS[$i]}")
+        PANE_BY_POSITION["${KNOWN_POSITIONS[$i]}"]="${KNOWN_PANES[$i]}"
     done
     for i in "${!NEW_PANE_POSITIONS[@]}"; do
-        ORD=$(position_order "${NEW_PANE_POSITIONS[$i]}")
         if [ $i -lt ${#NEW_PANES[@]} ]; then
-            SORTED_ENTRIES+=("$ORD:${NEW_PANES[$i]}:${NEW_PANE_POSITIONS[$i]}")
+            PANE_BY_POSITION["${NEW_PANE_POSITIONS[$i]}"]="${NEW_PANES[$i]}"
         fi
     done
 
-    # Sort
-    IFS=$'\n' SORTED_ENTRIES=($(sort <<< "${SORTED_ENTRIES[*]}")); unset IFS
+    LEAF_POSITIONS=()
+    while IFS= read -r pos; do
+        [ -n "$pos" ] && LEAF_POSITIONS+=("$pos")
+    done <<< "$(layout_leaf_positions 0 0 2 2 "${POSITIONS[@]}")"
 
-    # Place panes in correct positions using swap-pane
+    SORTED_ENTRIES=()
+    for pos in "${LEAF_POSITIONS[@]}"; do
+        SORTED_ENTRIES+=("0:${PANE_BY_POSITION[$pos]}:$pos")
+    done
+
+    # tmux の layout 文字列は pane ID ではなく leaf order を基準に割り当てるため、
+    # 適用前に pane の順番を layout の leaf order へ揃える。
     for idx in "${!SORTED_ENTRIES[@]}"; do
         ENTRY="${SORTED_ENTRIES[$idx]}"
         TARGET_PANE_ID=$(echo "$ENTRY" | cut -d: -f2)
@@ -410,7 +602,6 @@ for gid in $GROUP_IDS; do
             CURRENT_AT_IDX="${CURRENT_PANES[$idx]}"
             if [ "$TARGET_PANE_ID" != "$CURRENT_AT_IDX" ]; then
                 tmux swap-pane -s "$TARGET_PANE_ID" -t "$CURRENT_AT_IDX" 2>/dev/null || true
-                # Update CURRENT_PANES
                 for j in "${!CURRENT_PANES[@]}"; do
                     if [ "${CURRENT_PANES[$j]}" = "$TARGET_PANE_ID" ]; then
                         CURRENT_PANES[$j]="$CURRENT_AT_IDX"
@@ -421,6 +612,10 @@ for gid in $GROUP_IDS; do
             fi
         fi
     done
+
+    if [ "$ENTRY_COUNT" -gt 1 ]; then
+        apply_tmux_layout "$TARGET_WINDOW" "${POSITIONS[@]}"
+    fi
 
     # Add this window's information to the result JSON
     WINDOW_RESULT="[]"
