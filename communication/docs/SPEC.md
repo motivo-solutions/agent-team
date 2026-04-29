@@ -65,6 +65,7 @@ sequenceDiagram
 
     M->>S: 送信要求
     S->>O: frontmatter 付き Markdown を書き込み
+    S-->>M: 生成した Mailbox ファイルのパスを stdout に返却
     B->>O: outbox を監視
     B->>I: 同名ファイルを保存
     B->>P: 複数行の `[Mailbox]` プロンプトとして配送

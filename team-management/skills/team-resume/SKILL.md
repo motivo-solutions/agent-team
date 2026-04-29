@@ -38,8 +38,3 @@ This script is responsible for:
 - Restarting the single bridge only when `bridge.pid` is missing or the process is no longer alive
 
 The runtime script must treat the agent composition as an external input. Do not hardcode the team structure in the skill itself.
-
-### 4. Verify Bridge
-
-- Confirm the bridge process is running: `.ai-team/{session_name}/bridge.pid` exists and its PID is alive
-- Do not complete recovery if the bridge is not running. No further ping / acknowledgement checks are performed here

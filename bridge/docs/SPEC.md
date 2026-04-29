@@ -30,12 +30,37 @@ graph TB
 
 ### メッセージ中継
 
-1. bridge は `<mailbox_root> <member:pane>...` を受け取って起動する
-2. 各メンバーの `outbox/` を `inotifywait` で監視する
-3. メッセージファイルの frontmatter から `from` / `to` / `type` を読む
-4. 受信者の `inbox/` に同名ファイルを保存する
-5. 受信者の pane へ `[Mailbox]` プレフィックス付きメッセージを複数行のまま貼り付ける
-6. 受信者 pane に `Enter` を送って入力を確定する
+```mermaid
+sequenceDiagram
+    participant Starter as 起動元
+    participant Bridge as メッセージ中継処理
+    participant Outbox as 送信者の outbox ディレクトリ
+    participant Inbox as 受信者の inbox ディレクトリ
+    participant Pane as 受信者の tmux pane
+
+    Starter->>Bridge: Mailbox ルートと宛先 pane の対応を与えて起動
+    Bridge->>Pane: 各メンバーの pane の存在を確認
+    Bridge->>Outbox: 各メンバーの outbox の監視を開始
+
+    Bridge->>Outbox: 起動時点で残っている既存メッセージを取得
+    Outbox-->>Bridge: 既存メッセージ一覧
+
+    loop outbox にファイルが追加されるたび
+        Outbox-->>Bridge: 追加された Mailbox ファイル
+        Bridge->>Outbox: frontmatter（from/to/type）と本文を読み取る
+        Outbox-->>Bridge: メッセージ内容
+
+        alt 必須 frontmatter が欠落している
+            Bridge->>Bridge: 警告ログを出して破棄
+        else 宛先が未登録のメンバー
+            Bridge->>Bridge: 警告ログを出して破棄
+        else 正常系
+            Bridge->>Inbox: 同名ファイルを保存
+            Bridge->>Pane: [Mailbox] プレフィックス付きで本文を入力
+            Bridge->>Pane: Enter で入力を確定
+        end
+    end
+```
 
 ## 公開インターフェース
 

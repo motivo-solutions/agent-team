@@ -9,7 +9,7 @@ set -euo pipefail
 # Overview:
 #   1. session 名から state ディレクトリを決める。
 #   2. bridge を停止し、Mailbox を cleanup する。
-#   3. panes.env を読んで teammate pane を削除する。
+#   3. panes.env を読んで leader pane 維持と teammate pane 削除を apply-layout に依頼する。
 #   4. state ファイルを削除する。
 
 SESSION_NAME="$(tmux display-message -p '#{session_name}')"
@@ -51,12 +51,21 @@ if [ -f "$PANES_FILE" ]; then
     set +a
 
     layout_json="$(
-        TEAMMATES="${TEAMMATE_MEMBERS:-}" jq -nc '
-            (env.TEAMMATES | split(" ") | map(select(length > 0))) as $members
+        TEAM_MEMBERS_VALUE="${TEAM_MEMBERS:-}" TEAMMATES="${TEAMMATE_MEMBERS:-}" jq -nc '
+            (env.TEAM_MEMBERS_VALUE | split(" ") | map(select(length > 0))) as $all_members
+            | (env.TEAMMATES | split(" ") | map(select(length > 0))) as $teammates
             | [
-                $members[]
+                ($all_members - $teammates)[]
                 | {
                     group_id: 0,
+                    pane_id: (env[(ascii_upcase + "_PANE")]),
+                    position: "whole"
+                }
+            ]
+            + [
+                $teammates[]
+                | {
+                    group_id: null,
                     pane_id: (env[(ascii_upcase + "_PANE")]),
                     position: null
                 }
