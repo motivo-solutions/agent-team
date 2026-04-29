@@ -53,7 +53,6 @@ sequenceDiagram
     A->>SM: agents.config.json と pane_id を渡しエージェント起動を委譲
     A->>BR: 単一 bridge をバックグラウンド起動
     A->>A: pane_id と bridge.pid を状態ファイルへ保存
-    A->>A: bridge 稼働確認（bridge.pid の PID 生存チェック）
     A-->>U: 起動完了
 ```
 
@@ -88,7 +87,7 @@ sequenceDiagram
     A->>A: team-stop-runtime.sh を実行
     A->>A: bridge を停止
     A->>CM: Mailbox cleanup
-    A->>TL: 保存済み state に含まれる non-leader pane を破棄
+    A->>TL: leader pane 維持と non-leader pane 破棄を依頼
     A->>A: 状態ファイルを削除
     A-->>U: 終了完了
 ```
@@ -99,7 +98,7 @@ sequenceDiagram
 
 - レイアウト適用とペイン破棄に `apply-layout.sh` を使う
 - 起動時はペインを作成し、`member` ごとの `pane_id` を解決する
-- 終了時は保存済み状態にある non-leader pane を破棄する
+- 終了時は保存済み状態にある全 pane を渡し、leader pane を維持しながら non-leader pane を破棄する
 
 ### セッション管理モジュール
 

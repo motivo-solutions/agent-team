@@ -43,7 +43,7 @@ EOF_TMUX
 }
 
 # シナリオ: 保存済み state を使って team-stop-runtime を実行する。
-# 保証: panes.env に記録された non-leader メンバーだけを削除対象にした layout JSON が apply-layout に渡される。
+# 保証: panes.env に記録された全 pane を layout JSON に含め、leader は維持、non-leader は削除対象として apply-layout に渡される。
 @test "team-stop-runtime derives pane cleanup targets from saved member state" {
     prepare_tmux_stub
 
@@ -88,13 +88,14 @@ EOF_PANES
     grep -Fxq 'cleanup' "$MAILBOX_CLEANUP_LOG"
     grep -Fxq 'cleanup-session' "$APPLY_LAYOUT_SESSION_LOG"
     run jq -e '
-        length == 3
+        length == 4
+        and any(.pane_id == "%leader" and .group_id == 0 and .position == "whole")
         and any(.pane_id == "%reviewer" and .position == null)
         and any(.pane_id == "%builder" and .position == null)
         and any(.pane_id == "%observer" and .position == null)
     ' "$APPLY_LAYOUT_JSON_LOG"
     [ "$status" -eq 0 ]
-    run jq -e 'all(.pane_id != "%leader")' "$APPLY_LAYOUT_JSON_LOG"
+    run jq -e 'all(if .position == null then .group_id == null else true end)' "$APPLY_LAYOUT_JSON_LOG"
     [ "$status" -eq 0 ]
 
     [ ! -f "${PROJECT_DIR}/.ai-team/cleanup-session/bridge.pid" ]

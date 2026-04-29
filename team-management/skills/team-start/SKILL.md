@@ -54,11 +54,6 @@ This script is responsible for:
 
 The runtime script must treat the agent composition and layout as external inputs. Do not hardcode the team structure in the skill itself.
 
-### 5. Verify Bridge
-
-- Confirm the bridge process is running: `.ai-team/{session_name}/bridge.pid` exists and its PID is alive
-- Do not complete startup if the bridge is not running. No further ping / acknowledgement checks are performed here
-
 ## Recovery
 
 - To resume an existing session, use `/team-resume`

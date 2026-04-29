@@ -21,5 +21,5 @@ This script is responsible for:
 
 - Stopping the bridge process if it is alive
 - Running `.ai-team/scripts/mailbox-cleanup.sh`
-- Removing the configured non-leader panes via `.ai-team/scripts/apply-layout.sh`
+- Passing all saved panes to `.ai-team/scripts/apply-layout.sh` so the leader pane is kept and non-leader panes are removed
 - Removing `.ai-team/{session_name}/bridge.pid`, `bridge.log`, and `panes.env`
