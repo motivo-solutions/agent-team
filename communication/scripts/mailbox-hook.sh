@@ -215,6 +215,7 @@ case "$mode" in
     fi
 
     if "$send_script" \
+      --internal-from-hook \
       --member "$member" \
       --to "$sender" \
       --type response \

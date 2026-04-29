@@ -20,7 +20,7 @@ die() {
 #   不正なコマンドライン引数が渡されたときに usage を表示する。
 usage() {
     cat >&2 <<'EOF'
-Usage: send_mailbox_message.sh --member <member> --to <name> --type <request|response|question|error> --message <body> [--session-name <session>] [--repo-root <path>]
+Usage: send_mailbox_message.sh --member <member> --to <name> --type <request|response|question|error> --message <body> [--session-name <session>] [--repo-root <path>] [--internal-from-hook]
 EOF
     exit 1
 }
@@ -82,6 +82,7 @@ to=""
 message_type=""
 message=""
 session_name=""
+internal_from_hook=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -114,6 +115,10 @@ while [ $# -gt 0 ]; do
             [ $# -ge 2 ] || usage
             repo_root="$2"
             shift 2
+            ;;
+        --internal-from-hook)
+            internal_from_hook=1
+            shift
             ;;
         *)
             usage
@@ -148,6 +153,15 @@ if [ -z "$repo_root" ]; then
 fi
 
 repo_root="$(cd "$repo_root" && pwd)"
+
+# 返信は Stop hook が last_assistant_message を自動配送する責務である。
+# 当該 member の hook-state が残っているターン中の手動送信は誤起動と見なし拒否する。
+# hook 自身が呼ぶ場合のみ --internal-from-hook でこのガードを越える。
+state_file="${repo_root}/.ai-team/${session_name}/hook-state/${member}.json"
+if [ "$internal_from_hook" -eq 0 ] && [ -f "$state_file" ]; then
+    die "pending Mailbox reply for ${member}; reply by writing your response — the Stop hook will deliver it. Do not call send_mailbox_message.sh while a [Mailbox] prompt is being handled."
+fi
+
 outbox_dir="${repo_root}/.ai-team/${session_name}/mailbox/${member}/outbox"
 mkdir -p "$outbox_dir"
 
