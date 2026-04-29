@@ -1,424 +1,435 @@
 #!/usr/bin/env bats
 
-# apply-layout.sh のテスト
-# 実際の tmux セッションを使って検証する
+# apply-layout.sh のテスト。
+# 実際の tmux セッションを使い、pane/window の副作用まで検証する。
 
 SCRIPT_DIR="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../scripts" && pwd)"
 APPLY_LAYOUT="${SCRIPT_DIR}/apply-layout.sh"
 
 setup() {
-    TEST_SESSION="test-apply-layout-$$"
-    # テスト用 tmux セッションを作成（デタッチ状態）
+    TEST_SESSION="test-apply-layout-$$-${BATS_TEST_NUMBER}"
     tmux new-session -d -s "${TEST_SESSION}" -x 200 -y 50
-    # 初期ペインIDを取得
-    INITIAL_PANE=$(tmux list-panes -t "${TEST_SESSION}" -F '#{pane_id}')
-    INITIAL_WINDOW=$(tmux list-windows -t "${TEST_SESSION}" -F '#{window_id}')
+    INITIAL_PANE="$(tmux list-panes -t "${TEST_SESSION}" -F '#{pane_id}')"
+    INITIAL_WINDOW="$(tmux list-windows -t "${TEST_SESSION}" -F '#{window_id}')"
+    export TMUX_PANE="$INITIAL_PANE"
 }
 
 teardown() {
-    # テスト用セッションを破棄（存在する場合）
     tmux kill-session -t "${TEST_SESSION}" 2>/dev/null || true
 }
 
-# --- バリデーションテスト ---
+result_json() {
+    # Args:
+    #   なし。Bats の `$output` を参照する。
+    # Returns:
+    #   標準出力: apply-layout.sh が stdout に出した JSON。
+    # Overview:
+    #   stderr 側のログを混ぜる実行環境でも JSON だけを取り出せるようにする。
+    printf '%s\n' "$output" | grep -v '^\[apply-layout\]' | jq -c .
+}
+
+pane_count_in_window() {
+    # Args:
+    #   $1: tmux window_id。
+    # Returns:
+    #   標準出力: 対象 window に存在する pane 数。
+    # Overview:
+    #   list-panes の行数を空白なしの数値に正規化する。
+    tmux list-panes -t "${TEST_SESSION}:$1" | wc -l | tr -d ' '
+}
+
+pane_value() {
+    # Args:
+    #   $1: tmux pane_id。
+    #   $2: tmux format 文字列。
+    # Returns:
+    #   標準出力: 指定 pane の format 評価結果。
+    # Overview:
+    #   視覚的な pane 配置を座標値で検証する。
+    tmux display-message -p -t "$1" "$2"
+}
 
 # シナリオ: JSON として解釈できない入力を渡す。
-# 保証: apply-layout は失敗し、入力不正を示すエラーを返す。
+# 保証: tmux 操作を行わず、終了コード 1 で失敗する。
 @test "apply-layout rejects invalid JSON" {
     run bash "${APPLY_LAYOUT}" "not valid json" "${TEST_SESSION}"
+
     [ "$status" -eq 1 ]
-    [[ "$output" == *"error"* ]] || [[ "$output" == *"Error"* ]] || [[ "$output" == *"invalid"* ]] || [[ "$output" == *"Invalid"* ]]
+    [[ "$output" == *"Invalid JSON"* ]]
 }
 
-# シナリオ: top だけで bottom がないレイアウトを渡す。
-# 保証: 4 つの基本領域を覆えないため validation error になる。
-@test "apply-layout rejects top without bottom" {
+# シナリオ: top だけで bottom がなく、2x2 領域を覆い切れない layout を渡す。
+# 保証: 領域不足として拒否される。
+@test "apply-layout rejects incomplete position coverage" {
     local layout='[{"group_id":0,"pane_id":null,"position":"top"}]'
+
     run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
+
     [ "$status" -eq 1 ]
+    [[ "$output" == *"must cover"* ]]
 }
 
-# シナリオ: top-left だけで残りの基本領域がないレイアウトを渡す。
-# 保証: 4 つの基本領域を覆えないため validation error になる。
-@test "apply-layout rejects top-left without top-right" {
-    local layout='[{"group_id":0,"pane_id":null,"position":"top-left"}]'
-    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
-    [ "$status" -eq 1 ]
-}
-
-# シナリオ: left だけで right がないレイアウトを渡す。
-# 保証: 4 つの基本領域を覆えないため validation error になる。
-@test "apply-layout rejects left without right" {
-    local layout='[{"group_id":0,"pane_id":null,"position":"left"}]'
-    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
-    [ "$status" -eq 1 ]
-}
-
-# シナリオ: whole と他の position が同じ group に混在する。
-# 保証: whole は単独利用しか許可されず validation error になる。
-@test "apply-layout rejects whole with other panes" {
+# シナリオ: whole と他 position が同じ group に混在し、領域が重複する。
+# 保証: 重複 layout として拒否される。
+@test "apply-layout rejects overlapping positions" {
     local layout='[
         {"group_id":0,"pane_id":null,"position":"whole"},
         {"group_id":0,"pane_id":null,"position":"top"}
     ]'
+
     run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
+
     [ "$status" -eq 1 ]
+    [[ "$output" == *"overlap"* ]]
 }
 
-# シナリオ: top と top-right のように占有領域が重なる position を渡す。
-# 保証: 重複する基本領域が検出され validation error になる。
-@test "apply-layout rejects conflicting positions" {
-    # top と top-right は同じ top-right 領域を占有するため矛盾する。
-    local layout='[
-        {"group_id":0,"pane_id":null,"position":"top"},
-        {"group_id":0,"pane_id":null,"position":"top-right"}
-    ]'
-    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
-    [ "$status" -eq 1 ]
-}
-
-# シナリオ: 2 ペイン系と 4 ペイン系を混在させ、占有領域が重なる構成を渡す。
-# 保証: 重複する基本領域が検出され validation error になる。
-@test "apply-layout rejects mixed positions that overlap" {
-    local layout='[
-        {"group_id":0,"pane_id":null,"position":"left"},
-        {"group_id":0,"pane_id":null,"position":"bottom-left"},
-        {"group_id":0,"pane_id":null,"position":"top-right"}
-    ]'
-    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
-    [ "$status" -eq 1 ]
-}
-
-# シナリオ: 同じ group 内に同一 position が複数あるレイアウトを渡す。
-# 保証: 重複 position が検出され validation error になる。
+# シナリオ: 同じ group 内で position が重複する layout を渡す。
+# 保証: 同じ 2x2 領域を二重利用するため拒否される。
 @test "apply-layout rejects duplicate positions" {
     local layout='[
         {"group_id":0,"pane_id":null,"position":"top"},
         {"group_id":0,"pane_id":null,"position":"top"},
         {"group_id":0,"pane_id":null,"position":"bottom"}
     ]'
+
     run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
+
     [ "$status" -eq 1 ]
+    [[ "$output" == *"Duplicate position"* ]]
 }
 
-# --- 削除テスト ---
-
-# シナリオ: position が null の既存ペインを含むレイアウトを渡す。
-# 保証: 対象ペインだけが kill され、残すべきペインは維持される。
-@test "apply-layout kills panes with position null" {
-    # 2つ目のペインを作成
-    tmux split-window -t "${TEST_SESSION}"
-    local panes
-    panes=$(tmux list-panes -t "${TEST_SESSION}" -F '#{pane_id}')
-    local pane_to_kill
-    pane_to_kill=$(echo "$panes" | tail -1)
-    local pane_to_keep
-    pane_to_keep=$(echo "$panes" | head -1)
-
-    local layout
-    layout=$(jq -n --arg kill_id "$pane_to_kill" --arg keep_id "$pane_to_keep" '[
-        {"group_id":0, "pane_id":$keep_id, "position":"whole"},
-        {"group_id":null, "pane_id":$kill_id, "position":null}
-    ]')
-
-    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
-    [ "$status" -eq 0 ]
-
-    # kill されたペインが存在しないことを確認
-    local remaining_panes
-    remaining_panes=$(tmux list-panes -t "${TEST_SESSION}" -F '#{pane_id}')
-    [[ "$remaining_panes" != *"$pane_to_kill"* ]]
-}
-
-# --- ウィンドウ・グループテスト ---
-
-# シナリオ: 複数の group_id を持つレイアウトを渡す。
-# 保証: group_id ごとに tmux window が用意される。
-@test "apply-layout groups panes by group_id" {
-    # 2つの group_id → 2つのウィンドウ
+# シナリオ: session に存在する pane を layout に含めず、新規 pane として扱う入力を渡す。
+# 保証: session 状態と layout の pane_id 集合が不整合なため、バリデーションエラーになる。
+@test "apply-layout rejects layout that omits an existing session pane" {
     local layout='[
-        {"group_id":0,"pane_id":null,"position":"whole"},
-        {"group_id":1,"pane_id":null,"position":"whole"}
+        {"group_id":0,"pane_id":null,"position":"whole"}
     ]'
 
     run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
-    [ "$status" -eq 0 ]
 
-    # ウィンドウが2つあることを確認
-    local window_count
-    window_count=$(tmux list-windows -t "${TEST_SESSION}" | wc -l)
-    [ "$window_count" -eq 2 ]
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"does not match session panes"* ]]
 }
 
-# シナリオ: 既存ペインを別 window から対象 group の window へ移動する。
-# 保証: 指定された既存ペインが group_id に対応する window へ移動する。
-@test "apply-layout moves existing pane to correct window" {
-    # 2つ目のウィンドウを作成し、そこにペインを作る
-    tmux new-window -t "${TEST_SESSION}"
-    local second_window_pane
-    second_window_pane=$(tmux list-panes -t "${TEST_SESSION}:1" -F '#{pane_id}')
-
-    # group_id:0 に second_window_pane を移動させるレイアウト
+# シナリオ: layout が session に存在しない pane_id を参照する。
+# 保証: session 状態と layout の pane_id 集合が不整合なため、バリデーションエラーになる。
+@test "apply-layout rejects layout that references a non-session pane" {
     local layout
-    layout=$(jq -n --arg pid "$second_window_pane" --arg keep_id "$INITIAL_PANE" '[
+    layout="$(jq -n --arg keep_id "$INITIAL_PANE" '[
         {"group_id":0, "pane_id":$keep_id, "position":"top"},
-        {"group_id":0, "pane_id":$pid, "position":"bottom"}
-    ]')
+        {"group_id":0, "pane_id":"%999999", "position":"bottom"}
+    ]')"
 
     run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
-    [ "$status" -eq 0 ]
 
-    # second_window_pane が最初のウィンドウに移動していることを確認
-    local first_window_id
-    first_window_id=$(tmux list-windows -t "${TEST_SESSION}" -F '#{window_id}' | head -1)
-    local panes_in_first
-    panes_in_first=$(tmux list-panes -t "${TEST_SESSION}:${first_window_id}" -F '#{pane_id}')
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"does not match session panes"* ]]
+}
+
+# シナリオ: apply-layout.sh を実行した pane を削除対象にする layout を渡す。
+# 保証: 実行元 pane は position null を許容しないため、バリデーションエラーになる。
+@test "apply-layout rejects deleting the invoking pane" {
+    tmux split-window -t "${TEST_SESSION}"
+    local panes other_pane layout
+    panes="$(tmux list-panes -t "${TEST_SESSION}" -F '#{pane_id}')"
+    other_pane="$(printf '%s\n' "$panes" | sed -n '2p')"
+    layout="$(jq -n --arg runner "$TMUX_PANE" --arg other "$other_pane" '[
+        {"group_id":0, "pane_id":$other, "position":"whole"},
+        {"group_id":null, "pane_id":$runner, "position":null}
+    ]')"
+
+    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
+
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"invoking pane"* ]]
+}
+
+# シナリオ: position null の pane を含む cleanup layout を渡す。
+# 保証: 指定 pane だけが kill され、維持対象 pane は残る。
+@test "apply-layout kills panes with position null" {
+    tmux split-window -t "${TEST_SESSION}"
+    local panes pane_to_keep pane_to_kill layout remaining_panes
+    panes="$(tmux list-panes -t "${TEST_SESSION}" -F '#{pane_id}')"
+    pane_to_keep="$(printf '%s\n' "$panes" | sed -n '1p')"
+    pane_to_kill="$(printf '%s\n' "$panes" | sed -n '2p')"
+    layout="$(jq -n --arg keep_id "$pane_to_keep" --arg kill_id "$pane_to_kill" '[
+        {"group_id":0, "pane_id":$keep_id, "position":"whole"},
+        {"group_id":null, "pane_id":$kill_id, "position":null}
+    ]')"
+
+    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
+
+    [ "$status" -eq 0 ]
+    remaining_panes="$(tmux list-panes -a -t "${TEST_SESSION}" -F '#{pane_id}')"
+    [[ "$remaining_panes" == *"$pane_to_keep"* ]]
+    [[ "$remaining_panes" != *"$pane_to_kill"* ]]
+}
+
+# シナリオ: group_id が 2 つある layout を空に近い session へ適用する。
+# 保証: group 数に合わせて window が作成され、結果 JSON は 2 window を返す。
+@test "apply-layout creates windows for groups" {
+    local layout result window_count
+    layout="$(jq -n --arg pid "$INITIAL_PANE" '[
+        {"group_id":0,"pane_id":$pid,"position":"whole"},
+        {"group_id":1,"pane_id":null,"position":"whole"}
+    ]')"
+
+    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
+
+    [ "$status" -eq 0 ]
+    window_count="$(tmux list-windows -t "${TEST_SESSION}" | wc -l | tr -d ' ')"
+    [ "$window_count" -eq 2 ]
+    result="$(result_json)"
+    [ "$(jq 'keys | length' <<< "$result")" -eq 2 ]
+}
+
+# シナリオ: 既存 pane を別 group の window へ移動する layout を渡す。
+# 保証: 指定 pane は目標 group window に集約され、移動元 window は余分に残らない。
+@test "apply-layout moves existing pane to target group window" {
+    tmux new-window -t "${TEST_SESSION}"
+    local second_window_pane layout first_window panes_in_first window_count pane_count
+    second_window_pane="$(tmux list-panes -t "${TEST_SESSION}:1" -F '#{pane_id}')"
+    layout="$(jq -n --arg keep_id "$INITIAL_PANE" --arg move_id "$second_window_pane" '[
+        {"group_id":0, "pane_id":$keep_id, "position":"top"},
+        {"group_id":0, "pane_id":$move_id, "position":"bottom"}
+    ]')"
+
+    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
+
+    [ "$status" -eq 0 ]
+    first_window="$(tmux list-windows -t "${TEST_SESSION}" -F '#{window_id}' | sed -n '1p')"
+    panes_in_first="$(tmux list-panes -t "${TEST_SESSION}:${first_window}" -F '#{pane_id}')"
+    window_count="$(tmux list-windows -t "${TEST_SESSION}" | wc -l | tr -d ' ')"
+    pane_count="$(pane_count_in_window "$first_window")"
+    [ "$window_count" -eq 1 ]
+    [ "$pane_count" -eq 2 ]
     [[ "$panes_in_first" == *"$second_window_pane"* ]]
 }
 
-# シナリオ: pane_id が null の entry を含むレイアウトを渡す。
-# 保証: null entry に対応する新規ペインが作成される。
-@test "apply-layout creates new pane" {
-    # pane_id: null → split-window が実行される
-    local layout
-    layout=$(jq -n --arg pid "$INITIAL_PANE" '[
+# シナリオ: 既存 pane がない group と、既存 pane だけの group を同時に適用する。
+# 保証: 新規 window の初期 pane は layout に割り当てられず、pane_id null の補充分だけが残る。
+@test "apply-layout deletes new-window initial pane after filling null pane" {
+    local layout result first_window second_window first_position second_position window_count total_pane_count
+    layout="$(jq -n --arg pid "$INITIAL_PANE" '[
+        {"group_id":0, "pane_id":null, "position":"whole"},
+        {"group_id":1, "pane_id":$pid, "position":"whole"}
+    ]')"
+
+    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
+
+    [ "$status" -eq 0 ]
+    result="$(result_json)"
+    first_window="$(tmux list-windows -t "${TEST_SESSION}" -F '#{window_id}' | sed -n '1p')"
+    second_window="$(tmux list-windows -t "${TEST_SESSION}" -F '#{window_id}' | sed -n '2p')"
+    window_count="$(tmux list-windows -t "${TEST_SESSION}" | wc -l | tr -d ' ')"
+    total_pane_count="$(tmux list-panes -s -t "${TEST_SESSION}" -F '#{pane_id}' | wc -l | tr -d ' ')"
+    [ "$window_count" -eq 2 ]
+    [ "$total_pane_count" -eq 2 ]
+    [ "$(jq --arg window_id "$first_window" '.[$window_id] | length' <<< "$result")" -eq 1 ]
+    [ "$(jq --arg window_id "$second_window" '.[$window_id] | length' <<< "$result")" -eq 1 ]
+    first_position="$(jq -r --arg window_id "$first_window" '.[$window_id][0].position' <<< "$result")"
+    second_position="$(jq -r --arg window_id "$second_window" '.[$window_id][0].position' <<< "$result")"
+    [ "$first_position" = "whole" ]
+    [ "$second_position" = "whole" ]
+    [ "$(jq -r --arg window_id "$second_window" '.[$window_id][0].pane_id' <<< "$result")" = "$INITIAL_PANE" ]
+}
+
+# シナリオ: 1 pane window 同士の group 順が layout と逆になっている。
+# 保証: pane 移動ではなく window の並び替えで、stale window_id を参照せずに完了する。
+@test "apply-layout reorders single-pane windows without stale window ids" {
+    tmux new-window -t "${TEST_SESSION}"
+    local second_pane layout result first_window second_window
+    second_pane="$(tmux list-panes -t "${TEST_SESSION}:1" -F '#{pane_id}')"
+    layout="$(jq -n --arg first "$INITIAL_PANE" --arg second "$second_pane" '[
+        {"group_id":0, "pane_id":$second, "position":"whole"},
+        {"group_id":1, "pane_id":$first, "position":"whole"}
+    ]')"
+
+    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
+
+    [ "$status" -eq 0 ]
+    result="$(result_json)"
+    first_window="$(tmux list-windows -t "${TEST_SESSION}" -F '#{window_id}' | sed -n '1p')"
+    second_window="$(tmux list-windows -t "${TEST_SESSION}" -F '#{window_id}' | sed -n '2p')"
+    [ "$(jq -r --arg window_id "$first_window" '.[$window_id][0].pane_id' <<< "$result")" = "$second_pane" ]
+    [ "$(jq -r --arg window_id "$second_window" '.[$window_id][0].pane_id' <<< "$result")" = "$INITIAL_PANE" ]
+}
+
+# シナリオ: pane_id null を含む上下 2 ペイン layout を渡す。
+# 保証: 不足分の pane が作成され、結果 JSON から新規 pane_id を取得できる。
+@test "apply-layout creates a missing pane" {
+    local layout result pane_count new_pane
+    layout="$(jq -n --arg pid "$INITIAL_PANE" '[
         {"group_id":0, "pane_id":$pid, "position":"top"},
         {"group_id":0, "pane_id":null, "position":"bottom"}
-    ]')
+    ]')"
 
     run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
-    [ "$status" -eq 0 ]
 
-    # ペインが2つになっていることを確認
-    local pane_count
-    pane_count=$(tmux list-panes -t "${TEST_SESSION}:${INITIAL_WINDOW}" | wc -l)
+    [ "$status" -eq 0 ]
+    pane_count="$(pane_count_in_window "$INITIAL_WINDOW")"
     [ "$pane_count" -eq 2 ]
+    result="$(result_json)"
+    new_pane="$(jq -r '.[][] | select(.position == "bottom") | .pane_id' <<< "$result")"
+    [[ "$new_pane" == %* ]]
 }
 
-# シナリオ: 既存ペインを持たない新しい group を含むレイアウトを渡す。
-# 保証: 不足する tmux window が作成され、その group が配置される。
-@test "apply-layout creates new window when no existing pane" {
-    # 全 pane_id: null の新しいグループ → new-window
-    local layout
-    layout=$(jq -n --arg pid "$INITIAL_PANE" '[
-        {"group_id":0, "pane_id":$pid, "position":"whole"},
-        {"group_id":1, "pane_id":null, "position":"whole"}
-    ]')
+# シナリオ: left/right の 2 ペイン layout を渡す。
+# 保証: 仕様上有効な左右分割として受理され、両 position が結果に出る。
+@test "apply-layout supports left and right positions" {
+    local layout result positions
+    layout="$(jq -n --arg pid "$INITIAL_PANE" '[
+        {"group_id":0, "pane_id":$pid, "position":"left"},
+        {"group_id":0, "pane_id":null, "position":"right"}
+    ]')"
 
     run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
-    [ "$status" -eq 0 ]
 
-    # ウィンドウが2つあることを確認
-    local window_count
-    window_count=$(tmux list-windows -t "${TEST_SESSION}" | wc -l)
-    [ "$window_count" -eq 2 ]
+    [ "$status" -eq 0 ]
+    result="$(result_json)"
+    positions="$(jq -r '[.[][] | .position] | sort | join(",")' <<< "$result")"
+    [ "$positions" = "left,right" ]
 }
 
-# シナリオ: top-left / top-right / bottom-left / bottom-right の 4 分割を適用する。
-# 保証: 4 つの position が結果 JSON に保持される。
-@test "apply-layout arranges panes by position" {
-    # 4分割: top-left, top-right, bottom-left, bottom-right
-    local layout
-    layout=$(jq -n --arg pid "$INITIAL_PANE" '[
+# シナリオ: left と右側 2 分割が混在する 3 ペイン layout を渡す。
+# 保証: 2x2 領域を重複なく覆う混在形として受理される。
+@test "apply-layout supports mixed left and right-side quadrants" {
+    local layout result positions
+    layout="$(jq -n --arg pid "$INITIAL_PANE" '[
+        {"group_id":0, "pane_id":$pid, "position":"left"},
+        {"group_id":0, "pane_id":null, "position":"top-right"},
+        {"group_id":0, "pane_id":null, "position":"bottom-right"}
+    ]')"
+
+    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
+
+    [ "$status" -eq 0 ]
+    result="$(result_json)"
+    positions="$(jq -r '[.[][] | .position] | sort | join(",")' <<< "$result")"
+    [ "$positions" = "bottom-right,left,top-right" ]
+    [ "$(jq '[.[] | length] | add' <<< "$result")" -eq 3 ]
+}
+
+# シナリオ: left と右側 2 分割の混在 layout を適用する。
+# 保証: tmux 上の座標も「左 pane + 右上 pane + 右下 pane」の形になる。
+@test "apply-layout physically shapes mixed left and right-side quadrants" {
+    local layout result left_pane top_right_pane bottom_right_pane
+    layout="$(jq -n --arg pid "$INITIAL_PANE" '[
+        {"group_id":0, "pane_id":$pid, "position":"left"},
+        {"group_id":0, "pane_id":null, "position":"top-right"},
+        {"group_id":0, "pane_id":null, "position":"bottom-right"}
+    ]')"
+
+    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
+
+    [ "$status" -eq 0 ]
+    result="$(result_json)"
+    left_pane="$(jq -r '.[][] | select(.position == "left") | .pane_id' <<< "$result")"
+    top_right_pane="$(jq -r '.[][] | select(.position == "top-right") | .pane_id' <<< "$result")"
+    bottom_right_pane="$(jq -r '.[][] | select(.position == "bottom-right") | .pane_id' <<< "$result")"
+    [ "$(pane_value "$left_pane" '#{pane_left}')" -lt "$(pane_value "$top_right_pane" '#{pane_left}')" ]
+    [ "$(pane_value "$top_right_pane" '#{pane_left}')" -eq "$(pane_value "$bottom_right_pane" '#{pane_left}')" ]
+    [ "$(pane_value "$top_right_pane" '#{pane_top}')" -lt "$(pane_value "$bottom_right_pane" '#{pane_top}')" ]
+}
+
+# シナリオ: 4 象限 layout を渡す。
+# 保証: 4 pane が作られ、各 quadrant に pane_id が対応付く。
+@test "apply-layout arranges four quadrant positions" {
+    local layout result positions pane_count
+    layout="$(jq -n --arg pid "$INITIAL_PANE" '[
         {"group_id":0, "pane_id":$pid, "position":"top-left"},
         {"group_id":0, "pane_id":null, "position":"top-right"},
         {"group_id":0, "pane_id":null, "position":"bottom-left"},
         {"group_id":0, "pane_id":null, "position":"bottom-right"}
-    ]')
+    ]')"
 
     run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
+
     [ "$status" -eq 0 ]
-
-    # 出力JSONを検証: 4つのペインがあること
-    local result
-    result=$(echo "$output" | grep -v '^\[apply-layout\]')
-    local pane_count
-    pane_count=$(echo "$result" | jq '[.[] | length] | add')
+    result="$(result_json)"
+    pane_count="$(jq '[.[] | length] | add' <<< "$result")"
     [ "$pane_count" -eq 4 ]
-
-    # 各 position が正しく割り当てられていること
-    local positions
-    positions=$(echo "$result" | jq -r '[.[][] | .position] | sort | join(",")')
+    positions="$(jq -r '[.[][] | .position] | sort | join(",")' <<< "$result")"
     [ "$positions" = "bottom-left,bottom-right,top-left,top-right" ]
 }
 
-# シナリオ: left / right の 2 分割を適用する。
-# 保証: 左右 2 ペインの position が結果 JSON に保持される。
-@test "apply-layout arranges panes by left and right positions" {
-    local layout
-    layout=$(jq -n --arg pid "$INITIAL_PANE" '[
-        {"group_id":0, "pane_id":$pid, "position":"left"},
-        {"group_id":0, "pane_id":null, "position":"right"}
-    ]')
-
-    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
-    [ "$status" -eq 0 ]
-
-    local result
-    result=$(echo "$output" | grep -v '^\[apply-layout\]')
-    local pane_count
-    pane_count=$(echo "$result" | jq '[.[] | length] | add')
-    [ "$pane_count" -eq 2 ]
-
-    local positions
-    positions=$(echo "$result" | jq -r '[.[][] | .position] | sort | join(",")')
-    [ "$positions" = "left,right" ]
-}
-
-# シナリオ: left と右側上下 2 分割の mixed position を適用する。
-# 保証: left が全高を占有し、右側だけが上下分割される。
-@test "apply-layout allows mixed positions when areas do not overlap" {
-    local layout
-    layout=$(jq -n --arg pid "$INITIAL_PANE" '[
-        {"group_id":0, "pane_id":$pid, "position":"left"},
-        {"group_id":0, "pane_id":null, "position":"top-right"},
-        {"group_id":0, "pane_id":null, "position":"bottom-right"}
-    ]')
-
-    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
-    [ "$status" -eq 0 ]
-
-    local result
-    result=$(echo "$output" | grep -v '^\[apply-layout\]')
-    local pane_count
-    pane_count=$(echo "$result" | jq '[.[] | length] | add')
-    [ "$pane_count" -eq 3 ]
-
-    local positions
-    positions=$(echo "$result" | jq -r '[.[][] | .position] | sort | join(",")')
-    [ "$positions" = "bottom-right,left,top-right" ]
-
-    # left は全高を占有し、右側だけが上下に分割されることを保証する。
-    local left_pane
-    local top_right_pane
-    local bottom_right_pane
-    left_pane=$(echo "$result" | jq -r '.[][] | select(.position == "left") | .pane_id')
-    top_right_pane=$(echo "$result" | jq -r '.[][] | select(.position == "top-right") | .pane_id')
-    bottom_right_pane=$(echo "$result" | jq -r '.[][] | select(.position == "bottom-right") | .pane_id')
-
-    local left_x left_y left_width left_height
-    local top_right_x top_right_y top_right_width top_right_height
-    local bottom_right_x bottom_right_y bottom_right_width bottom_right_height
-    read -r left_x left_y left_width left_height <<< "$(tmux display-message -p -t "$left_pane" '#{pane_left} #{pane_top} #{pane_width} #{pane_height}')"
-    read -r top_right_x top_right_y top_right_width top_right_height <<< "$(tmux display-message -p -t "$top_right_pane" '#{pane_left} #{pane_top} #{pane_width} #{pane_height}')"
-    read -r bottom_right_x bottom_right_y bottom_right_width bottom_right_height <<< "$(tmux display-message -p -t "$bottom_right_pane" '#{pane_left} #{pane_top} #{pane_width} #{pane_height}')"
-
-    [ "$left_x" -eq 0 ]
-    [ "$left_y" -eq 0 ]
-    [ "$top_right_x" -gt "$left_x" ]
-    [ "$bottom_right_x" -eq "$top_right_x" ]
-    [ "$top_right_y" -eq 0 ]
-    [ "$bottom_right_y" -gt "$top_right_y" ]
-    [ "$left_height" -gt "$top_right_height" ]
-    [ "$left_height" -gt "$bottom_right_height" ]
-    [ "$top_right_width" -eq "$bottom_right_width" ]
-}
-
-# シナリオ: right と左側上下 2 分割の mixed position を適用する。
-# 保証: right が全高を占有し、左側だけが上下分割される。
-@test "apply-layout arranges mixed positions with right occupying full height" {
-    local layout
-    layout=$(jq -n --arg pid "$INITIAL_PANE" '[
-        {"group_id":0, "pane_id":$pid, "position":"right"},
-        {"group_id":0, "pane_id":null, "position":"top-left"},
-        {"group_id":0, "pane_id":null, "position":"bottom-left"}
-    ]')
-
-    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
-    [ "$status" -eq 0 ]
-
-    local result
-    result=$(echo "$output" | grep -v '^\[apply-layout\]')
-    local right_pane
-    local top_left_pane
-    local bottom_left_pane
-    right_pane=$(echo "$result" | jq -r '.[][] | select(.position == "right") | .pane_id')
-    top_left_pane=$(echo "$result" | jq -r '.[][] | select(.position == "top-left") | .pane_id')
-    bottom_left_pane=$(echo "$result" | jq -r '.[][] | select(.position == "bottom-left") | .pane_id')
-
-    local right_x right_y right_width right_height
-    local top_left_x top_left_y top_left_width top_left_height
-    local bottom_left_x bottom_left_y bottom_left_width bottom_left_height
-    read -r right_x right_y right_width right_height <<< "$(tmux display-message -p -t "$right_pane" '#{pane_left} #{pane_top} #{pane_width} #{pane_height}')"
-    read -r top_left_x top_left_y top_left_width top_left_height <<< "$(tmux display-message -p -t "$top_left_pane" '#{pane_left} #{pane_top} #{pane_width} #{pane_height}')"
-    read -r bottom_left_x bottom_left_y bottom_left_width bottom_left_height <<< "$(tmux display-message -p -t "$bottom_left_pane" '#{pane_left} #{pane_top} #{pane_width} #{pane_height}')"
-
-    [ "$right_y" -eq 0 ]
-    [ "$right_x" -gt "$top_left_x" ]
-    [ "$top_left_x" -eq "$bottom_left_x" ]
-    [ "$bottom_left_y" -gt "$top_left_y" ]
-    [ "$right_height" -gt "$top_left_height" ]
-    [ "$right_height" -gt "$bottom_left_height" ]
-    [ "$top_left_width" -eq "$bottom_left_width" ]
-}
-
-# シナリオ: 既存の複数 agent pane を新規 window 作成を伴って再配置する。
-# 保証: new-window の ghost pane だけが整理され、agent pane は削除されない。
-@test "apply-layout does not kill agent panes when creating new windows" {
-    # Simulate team-start scenario: 4 agent panes exist, move 2 to a new window
-    # This tests the ghost pane issue: new-window creates a default pane that
-    # must be cleaned up without killing the agent panes
+# シナリオ: 既存 4 pane のうち 2 pane を新規 group window へ移す。
+# 保証: new-window が作る ghost pane は残らず、元の agent pane はすべて残る。
+@test "apply-layout removes ghost panes without killing moved panes" {
     tmux split-window -t "${TEST_SESSION}"
     tmux split-window -t "${TEST_SESSION}"
     tmux split-window -t "${TEST_SESSION}"
 
-    local all_panes
-    all_panes=$(tmux list-panes -t "${TEST_SESSION}" -F '#{pane_id}')
-    local pane1 pane2 pane3 pane4
-    pane1=$(echo "$all_panes" | sed -n '1p')
-    pane2=$(echo "$all_panes" | sed -n '2p')
-    pane3=$(echo "$all_panes" | sed -n '3p')
-    pane4=$(echo "$all_panes" | sed -n '4p')
-
-    # pane1, pane2 stay in window 0; pane3, pane4 move to new window (group 1)
-    local layout
-    layout=$(jq -n --arg p1 "$pane1" --arg p2 "$pane2" --arg p3 "$pane3" --arg p4 "$pane4" '[
+    local all_panes pane1 pane2 pane3 pane4 layout second_window pane_count remaining_panes
+    all_panes="$(tmux list-panes -t "${TEST_SESSION}" -F '#{pane_id}')"
+    pane1="$(printf '%s\n' "$all_panes" | sed -n '1p')"
+    pane2="$(printf '%s\n' "$all_panes" | sed -n '2p')"
+    pane3="$(printf '%s\n' "$all_panes" | sed -n '3p')"
+    pane4="$(printf '%s\n' "$all_panes" | sed -n '4p')"
+    layout="$(jq -n --arg p1 "$pane1" --arg p2 "$pane2" --arg p3 "$pane3" --arg p4 "$pane4" '[
         {"group_id":0, "pane_id":$p1, "position":"top"},
         {"group_id":0, "pane_id":$p2, "position":"bottom"},
         {"group_id":1, "pane_id":$p3, "position":"top"},
         {"group_id":1, "pane_id":$p4, "position":"bottom"}
-    ]')
+    ]')"
 
     run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
-    [ "$status" -eq 0 ]
 
-    # All 4 original panes must still exist
-    local remaining_panes
-    remaining_panes=$(tmux list-panes -a -t "${TEST_SESSION}" -F '#{pane_id}')
+    [ "$status" -eq 0 ]
+    remaining_panes="$(tmux list-panes -a -t "${TEST_SESSION}" -F '#{pane_id}')"
     [[ "$remaining_panes" == *"$pane1"* ]]
     [[ "$remaining_panes" == *"$pane2"* ]]
     [[ "$remaining_panes" == *"$pane3"* ]]
     [[ "$remaining_panes" == *"$pane4"* ]]
-
-    # Window 1 should have exactly 2 panes (not 3 with ghost)
-    local second_window
-    second_window=$(tmux list-windows -t "${TEST_SESSION}" -F '#{window_id}' | sed -n '2p')
-    local pane_count
-    pane_count=$(tmux list-panes -t "${TEST_SESSION}:${second_window}" | wc -l)
+    second_window="$(tmux list-windows -t "${TEST_SESSION}" -F '#{window_id}' | sed -n '2p')"
+    pane_count="$(pane_count_in_window "$second_window")"
     [ "$pane_count" -eq 2 ]
 }
 
-# シナリオ: whole position の単一ペインレイアウトを適用する。
-# 保証: 結果 JSON で対象ペインの position が whole として返る。
-@test "apply-layout handles whole position" {
-    # position: "whole" → ウィンドウ全体
-    local layout
-    layout=$(jq -n --arg pid "$INITIAL_PANE" '[
-        {"group_id":0, "pane_id":$pid, "position":"whole"}
-    ]')
+# シナリオ: 初回結果の pane_id を使って同じ目標 layout を 2 回続けて適用する。
+# 保証: 2 回目に余分な pane は作られず、pane 数は目標数のまま維持される。
+@test "apply-layout is idempotent when existing panes are explicit" {
+    local layout first_result second_layout second_result first_count second_count bottom_pane
+    layout="$(jq -n --arg pid "$INITIAL_PANE" '[
+        {"group_id":0, "pane_id":$pid, "position":"top"},
+        {"group_id":0, "pane_id":null, "position":"bottom"}
+    ]')"
 
     run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
     [ "$status" -eq 0 ]
+    first_result="$(result_json)"
+    first_count="$(pane_count_in_window "$INITIAL_WINDOW")"
+    bottom_pane="$(jq -r '.[][] | select(.position == "bottom") | .pane_id' <<< "$first_result")"
+    second_layout="$(jq -n --arg top_pane "$INITIAL_PANE" --arg bottom_pane "$bottom_pane" '[
+        {"group_id":0, "pane_id":$top_pane, "position":"top"},
+        {"group_id":0, "pane_id":$bottom_pane, "position":"bottom"}
+    ]')"
 
-    # 出力JSONを検証: 1つのペインで position が "whole"
-    local result
-    result=$(echo "$output" | grep -v '^\[apply-layout\]')
-    local position
-    position=$(echo "$result" | jq -r '.[][] | .position')
+    run bash "${APPLY_LAYOUT}" "$second_layout" "${TEST_SESSION}"
+
+    [ "$status" -eq 0 ]
+    second_result="$(result_json)"
+    second_count="$(pane_count_in_window "$INITIAL_WINDOW")"
+    [ "$first_count" -eq 2 ]
+    [ "$second_count" -eq 2 ]
+    [ "$(jq '[.[] | length] | add' <<< "$first_result")" -eq 2 ]
+    [ "$(jq '[.[] | length] | add' <<< "$second_result")" -eq 2 ]
+}
+
+# シナリオ: whole 1 pane の layout を渡す。
+# 保証: window 内は 1 pane となり、結果 JSON も whole を返す。
+@test "apply-layout handles whole position" {
+    local layout result pane_count position
+    layout="$(jq -n --arg pid "$INITIAL_PANE" '[
+        {"group_id":0, "pane_id":$pid, "position":"whole"}
+    ]')"
+
+    run bash "${APPLY_LAYOUT}" "$layout" "${TEST_SESSION}"
+
+    [ "$status" -eq 0 ]
+    result="$(result_json)"
+    position="$(jq -r '.[][] | .position' <<< "$result")"
     [ "$position" = "whole" ]
-
-    # ウィンドウ内のペインが1つであること
-    local pane_count
-    pane_count=$(tmux list-panes -t "${TEST_SESSION}:${INITIAL_WINDOW}" | wc -l)
+    pane_count="$(pane_count_in_window "$INITIAL_WINDOW")"
     [ "$pane_count" -eq 1 ]
 }

@@ -40,49 +40,75 @@ graph LR
 
 ```mermaid
 sequenceDiagram
-    participant C as 呼び出し元
-    participant SM as apply-layout.sh
-    participant TM as tmux
+    participant Caller as 呼び出し元
+    participant Layout as レイアウト適用処理
+    participant Tmux as tmux
 
-    C->>SM: apply-layout.sh '<layout_json>' <session_name>
+    Caller->>Layout: レイアウト定義 JSON と session 名を渡す
+    Layout->>Layout: 入力形式と position の整合性を検証する
+    Layout->>Tmux: session 内の既存 pane 一覧を取得する
+    Layout->>Layout: 既存 pane と layout の pane_id 集合が一致することを検証する
+    Layout->>Tmux: 実行元 pane の所属 session を確認する
+    Layout->>Layout: 実行元 pane の position が null でないことを検証する
 
-    Note over SM: Step 1: バリデーション
-    SM->>SM: レイアウト定義の整合性を検証
-    Note over SM: - position の組み合わせが有効か<br/>- whole は group 内で単独か<br/>- 必須フィールドが存在するか
-    alt バリデーションエラー
-        SM-->>C: エラー（exit 1）
-    end
-
-    Note over SM,TM: Step 2: 削除対象の処理
-    loop position が null の要素
-        SM->>TM: 該当ペインを削除
-    end
-
-    Note over SM,TM: Step 3: ウィンドウ数の調整
-    SM->>TM: 現在のウィンドウ数を取得
-    alt ウィンドウが不足
-        SM->>TM: 不足分のウィンドウを作成
-    end
-
-    Note over SM,TM: Step 4: ペインの移動・作成
-    loop 既存ペイン
-        alt 現在のウィンドウ ≠ 目標のウィンドウ
-            SM->>TM: ペインを目標ウィンドウに移動
+    alt 入力が不正
+        Layout-->>Caller: エラーを返す
+    else 既存 pane と layout が不整合
+        Layout-->>Caller: エラーを返す
+    else 実行元 pane が削除対象
+        Layout-->>Caller: エラーを返す
+    else 入力が有効
+        loop 削除対象 pane ごと
+            Layout->>Tmux: 指定 pane を削除する
         end
-    end
-    loop 新規ペイン（pane_id: null）
-        SM->>TM: 目標ウィンドウに新規ペインを作成
-        Note over SM: 既存ペインの作業ディレクトリを引き継ぐ
-    end
 
-    Note over SM,TM: Step 5: ウィンドウ内のペイン配置調整
-    loop 各ウィンドウ
-        SM->>TM: position に基づきペインの並び順を調整
-    end
+        loop 既存 pane ごと
+            Layout->>Tmux: pane の所属 window を取得する
+            alt group の配置先 window が未確定、かつ所属 window が未使用
+                Layout->>Layout: 所属 window を group の配置先にする
+            else group の配置先 window が未確定、かつ所属 window が使用済み
+                Layout->>Tmux: group の配置先 window を新規作成する
+            else group の配置先 window が確定済み
+                Layout->>Layout: 既存の対応を使う
+            end
 
-    Note over SM: Step 6: 結果出力
-    SM-->>C: 適用結果 JSON（window_id → {pane_id, position} のマッピング）
+            alt 所属 window と配置先 window が異なる
+                Layout->>Tmux: pane を配置先 window へ移動する
+            else 所属 window が目標 group と一致
+                Layout->>Layout: pane を維持対象として扱う
+            end
+        end
+
+        loop group ごと
+            alt group の配置先 window が未確定
+                Layout->>Tmux: group の配置先 window を新規作成する
+            else group の配置先 window が確定済み
+                Layout->>Layout: 既存の対応を使う
+            end
+
+            alt pane_id が null の position がある
+                Layout->>Tmux: 不足分の pane を作成する
+            else 既存 pane だけで group が満たされる
+                Layout->>Layout: pane 作成を行わない
+            end
+
+            Layout->>Tmux: layout 外の pane が残らないように整える
+            Layout->>Tmux: position に合わせて window 内の pane 配置を整える
+        end
+
+        Layout->>Tmux: group_id 昇順に window を並び替える
+        Layout-->>Caller: 適用後の window/pane 構成 JSON を返す
+    end
 ```
+
+### 補足
+
+- レイアウト適用開始時点で session 内に存在する pane は、維持・移動・削除のいずれの場合も layout に `pane_id` として含まれている必要がある。
+- `apply-layout.sh` を実行している pane は、対象 session に属しており、かつ `position` が `null` であってはならない。
+- group の配置先 window は、既存 pane の現在地から決定する。既存 pane の現在地を配置先にできない場合、または `pane_id: null` だけの group の場合は、必要になった時点で window を新規作成する。
+- 新規作成した window は、layout で指定された pane 構成だけが残るように整える。
+- window 内の position 調整では一時 window や保護用 pane を作成せず、対象 window 内の pane を直接再配置する。
+- `position` の整合性は、同一 group 内の指定が 2x2 領域を重複なく覆うかどうかで判定する。
 
 ---
 
@@ -95,12 +121,6 @@ sequenceDiagram
 | 用途 | ウィンドウ・ペインの作成・移動・削除 |
 | バージョン | 3.x 以上 |
 
-### jq
-
-| 項目 | 内容 |
-|---|---|
-| 用途 | レイアウト定義 JSON のパース |
-
 ---
 
 ## 公開インターフェース
@@ -112,15 +132,20 @@ sequenceDiagram
 | `apply-layout.sh` | `<layout_json>` `<session_name>` | レイアウト定義に基づきペイン構成を適用し、適用結果を JSON で stdout に出力する。`install.sh` により `.ai-team/scripts/apply-layout.sh` に配置される |
 | `install.sh` | なし | `apply-layout.sh` を `.ai-team/scripts/` に配置する |
 
+`apply-layout.sh` は tmux が設定する環境変数 `TMUX_PANE` を参照し、実行元 pane を判定する。
+
 ### レイアウト定義（入力）
 
 `apply-layout.sh` に渡す JSON。辞書のリストであり、各要素が 1 つのペイン操作を表す。呼び出し元が `pane_id` を直接指定するため、本モジュールはペインの識別に関する独自の仕組みを持たない。
 
+適用開始時点で session 内に存在する pane は、維持・移動・削除のいずれの場合も `pane_id` として入力に含める必要がある。`pane_id: null` は、適用処理の中で新規作成する pane のみに使用する。
+
+`TMUX_PANE` が示す実行元 pane の entry は、`position: null` にしてはならない。
+
 ```json
 [
-  { "group_id": 0, "pane_id": "%5",  "position": "top-left" },
+  { "group_id": 0, "pane_id": "%5",  "position": "left" },
   { "group_id": 0, "pane_id": "%6",  "position": "top-right" },
-  { "group_id": 0, "pane_id": null,  "position": "bottom-left" },
   { "group_id": 0, "pane_id": null,  "position": "bottom-right" },
   { "group_id": 1, "pane_id": "%7",  "position": "left" },
   { "group_id": 1, "pane_id": "%8",  "position": "right" },
@@ -143,10 +168,9 @@ sequenceDiagram
 ```json
 {
   "@1": [
-    { "pane_id": "%5",  "position": "top-left" },
+    { "pane_id": "%5",  "position": "left" },
     { "pane_id": "%6",  "position": "top-right" },
-    { "pane_id": "%10", "position": "bottom-left" },
-    { "pane_id": "%11", "position": "bottom-right" }
+    { "pane_id": "%10", "position": "bottom-right" }
   ],
   "@2": [
     { "pane_id": "%7",  "position": "left" },
