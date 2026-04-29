@@ -80,7 +80,7 @@ sequenceDiagram
 |---|---|---|---|
 | `mailbox-init.sh` | team-management | `<member>...` | 現在の tmux セッションの Mailbox を初期化する |
 | `mailbox-cleanup.sh` | team-management | なし | 現在の tmux セッションの Mailbox を削除する |
-| `send_mailbox_message.sh` | hooks / 各メンバー | `--member --to --type --message` | 送信者 outbox にメッセージファイルを書き込む |
+| `send_mailbox_message.sh` | hooks / 各メンバー | `--member --to --type --message [--internal-from-hook]` | 送信者 outbox にメッセージファイルを書き込む。`--internal-from-hook` は hook からの自動返信時に pending reply ガードをバイパスするための内部フラグ |
 | `mailbox-hook.sh` | Claude / Codex hooks | `record-prompt \| flush-reply` | Mailbox 由来 turn を記録し、完了時に自動返信する |
 | `mailbox-compose` | Claude / Codex skills | なし | 明示的な新規送信時に `send_mailbox_message.sh` を呼び出す |
 | `install.sh` | セットアップ | `[--project-dir <path>]` | communication モジュールの成果物を配置し、hook を設定する |
@@ -159,4 +159,4 @@ Please implement the latest battle flow.
 ## 手動送信ルール
 
 - 明示的な新規送信が必要なときだけ `mailbox-compose` skill を使う
-- `mailbox-compose` は返信用ではなく、新しい依頼・質問・報告を Mailbox へ流すための入口とする
+- `mailbox-compose` は返信用ではなく、新しい依頼・質問・エラー報告を Mailbox へ流すための入口とする（skill から指定する `type` は `request` / `question` / `error` に限る）
